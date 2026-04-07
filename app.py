@@ -38,7 +38,7 @@ cloudinary.config(
 PUBLIC_FILE_ID = "data_saybread.xlsx"
 PUBLIC_PERIODE_ID = "periode_saybread.txt" # File pendamping untuk menyimpan tanggal
 
-st.title("🍞 Portal Say Bread")
+st.title("🍞 Monitoring Say Bread Cab.Bali")
 
 # ==========================================
 # 3. MENU UTAMA MENGGUNAKAN TABS
