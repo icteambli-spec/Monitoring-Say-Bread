@@ -36,14 +36,20 @@ cloudinary.config(
 )
 
 PUBLIC_FILE_ID = "data_saybread.xlsx"
-PUBLIC_PERIODE_ID = "periode_saybread.txt" # File pendamping untuk menyimpan tanggal
+PUBLIC_PERIODE_ID = "periode_saybread.txt"
 
-st.title("🍞 Monitoring Say Bread Cab.Bali")
+st.title("🍞 Monitoring Say Bread")
 
 # ==========================================
-# 3. MENU UTAMA MENGGUNAKAN TABS
+# 3. MENU UTAMA MENGGUNAKAN TABS (DIPERBARUI)
 # ==========================================
-tab_monitoring, tab_admin = st.tabs(["📊 Monitoring Say Bread", "🔐 Admin"])
+# Menambahkan tab baru "Cek DSI FD Say Bread"
+tab_monitoring, tab_dsi, tab_admin = st.tabs([
+    "📊 Monitoring Say Bread", 
+    "📈 Cek DSI FD Say Bread", 
+    "🔐 Admin"
+])
+
 
 # ------------------------------------------
 # ISI TAB 1: MONITORING SAY BREAD
@@ -59,30 +65,31 @@ with tab_monitoring:
     fetch_periode_url = f"{periode_url}?t={int(time.time())}"
 
     try:
-        # Mengambil file Excel
         response = requests.get(fetch_url)
         
-        # Mengambil file Teks Periode (Jika ada)
         teks_periode = "Belum diatur"
         try:
             resp_periode = requests.get(fetch_periode_url)
             if resp_periode.status_code == 200:
                 teks_periode = resp_periode.text
         except:
-            pass # Abaikan jika file periode belum dibuat oleh admin
+            pass
             
         if response.status_code == 200:
             df = pd.read_excel(BytesIO(response.content))
             df['Toko'] = df['Toko'].astype(str).str.strip().str.upper()
 
-            # 1. Menampilkan Label Periode Data
             st.markdown(f"#### 📅 Periode Data: `{teks_periode}`")
-            st.write("") # Spasi kosong
+            st.write("")
 
-            # 2. Kolom Input Kode Toko
+            # Kolom Input Kode Toko
             input_toko = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, placeholder="Contoh: F08C").upper()
+            
+            # Tombol ENTER di bawah kolom input toko
+            btn_enter_toko = st.button("Enter ↵", key="btn_toko", type="primary")
 
-            if input_toko:
+            # Sistem akan memproses jika user menekan Enter di keyboard ATAU mengklik tombol Enter
+            if input_toko or btn_enter_toko:
                 if len(input_toko) < 4:
                     st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
                 elif len(input_toko) == 4:
@@ -93,7 +100,6 @@ with tab_monitoring:
                     else:
                         st.markdown("---")
                         
-                        # Label Nama, AM, dan AS
                         nama_toko = filtered_df.iloc[0]['Nama']
                         am_toko = filtered_df.iloc[0]['AM']
                         as_toko = filtered_df.iloc[0]['AS']
@@ -108,7 +114,6 @@ with tab_monitoring:
                         
                         st.write("")
 
-                        # Tampilan Data Terbatas di Layar
                         kolom_tampil = [
                             'PLU Jual', 'Deskripsi', 'Qty Produksi', 'Qty Sales', 
                             'QTY Total Rusak', '% Rusak By Qty', 'Avg Produksi', 
@@ -120,13 +125,11 @@ with tab_monitoring:
 
                         st.write(f"**Tabel Data Item - {nama_toko}**")
                         
-                        # 3. Menampilkan dataframe dengan Format 2 digit desimal
                         st.dataframe(
                             display_df, 
                             hide_index=True, 
                             use_container_width=True,
                             column_config={
-                                # Mengatur kolom-kolom persentase & rata-rata menjadi 2 digit di belakang koma (%.2f)
                                 "% Rusak By Qty": st.column_config.NumberColumn(format="%.2f"),
                                 "Avg Produksi": st.column_config.NumberColumn(format="%.2f"),
                                 "Avg Sales": st.column_config.NumberColumn(format="%.2f"),
@@ -136,7 +139,6 @@ with tab_monitoring:
 
                         st.markdown("<br>", unsafe_allow_html=True)
 
-                        # Tombol Download Data Lengkap
                         output = BytesIO()
                         with pd.ExcelWriter(output, engine='openpyxl') as writer:
                             filtered_df.to_excel(writer, index=False, sheet_name='Data_Toko')
@@ -146,8 +148,7 @@ with tab_monitoring:
                             label=f"📥 Download Data Lengkap {input_toko} (Excel)",
                             data=excel_data,
                             file_name=f"Data_SayBread_{input_toko}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            type="primary"
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         )
         else:
             st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
@@ -157,22 +158,34 @@ with tab_monitoring:
 
 
 # ------------------------------------------
-# ISI TAB 2: ADMIN AREA
+# ISI TAB 2: CEK DSI FD SAY BREAD (COMING SOON)
+# ------------------------------------------
+with tab_dsi:
+    st.subheader("Cek DSI FD Say Bread")
+    
+    # Pesan Coming Soon
+    st.info("🚀 **Coming Soon!**\n\nFitur ini sedang dalam tahap pengembangan. Nantikan pembaruannya segera!")
+    
+
+# ------------------------------------------
+# ISI TAB 3: ADMIN AREA
 # ------------------------------------------
 with tab_admin:
     st.subheader("Halaman Admin")
     
     password_input = st.text_input("Masukkan Password Admin:", type="password", key="admin_pass")
     
+    # Tombol ENTER di bawah kolom input password
+    btn_enter_admin = st.button("Enter ↵", key="btn_admin", type="primary")
+    
+    # Jika password benar
     if password_input == "icnbr034":
         st.success("🔓 Login Berhasil! Selamat datang Admin.")
         st.markdown("---")
         
-        # Input Kalender (Bisa pilih 1 tanggal atau rentang tanggal)
         st.write("**1. Tentukan Periode Data:**")
         input_periode = st.date_input("Pilih Tanggal Periode (Bisa pilih rentang/range):", [])
         
-        # Konversi input kalender menjadi teks
         if len(input_periode) == 2:
             teks_periode_upload = f"{input_periode[0].strftime('%d %B %Y')} - {input_periode[1].strftime('%d %B %Y')}"
         elif len(input_periode) == 1:
@@ -187,7 +200,6 @@ with tab_admin:
             if st.button("📤 Upload & Perbarui Data"):
                 with st.spinner("Mengunggah data ke Cloudinary..."):
                     try:
-                        # Upload File Excel
                         cloudinary.uploader.upload(
                             uploaded_file,
                             resource_type="raw",
@@ -196,7 +208,6 @@ with tab_admin:
                             invalidate=True
                         )
                         
-                        # Upload Teks Periode sebagai file text ke Cloudinary
                         cloudinary.uploader.upload(
                             BytesIO(teks_periode_upload.encode('utf-8')),
                             resource_type="raw",
@@ -209,5 +220,6 @@ with tab_admin:
                     except Exception as e:
                         st.error(f"❌ Gagal mengunggah file: {e}")
                         
+    # Jika diketik password dan salah
     elif password_input != "":
         st.error("❌ Password Salah! Anda tidak memiliki akses.")
