@@ -55,7 +55,7 @@ cloudinary.config(
 PUBLIC_FILE_ID = "data_saybread.xlsx"
 PUBLIC_PERIODE_ID = "periode_saybread.json"
 
-st.title("🍞 Portal Say Bread")
+st.title("🍞 Monitoring Say Bread")
 
 # ==========================================
 # 3. FUNGSI BANTU
@@ -177,7 +177,7 @@ with tab_resume:
 # ISI TAB 2: MONITORING SAY BREAD
 # ------------------------------------------
 with tab_monitoring:
-    st.subheader("Monitoring Data Toko")
+    st.subheader("Monitoring Produksi, Sales, Rusak Per Toko")
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Monitoring', 'Belum diatur')}`")
     st.write("")
 
@@ -259,7 +259,7 @@ with tab_dsi:
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FD', 'Belum diatur')}`")
     st.write("")
 
-    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Resume Default):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
+    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko Untuk Lihat Detail Item (Kosongkan untuk melihat Resume Default):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
     btn_enter_dsi = st.button("Enter ↵", key="btn_dsi", type="primary")
 
     with st.spinner("Memuat data..."):
