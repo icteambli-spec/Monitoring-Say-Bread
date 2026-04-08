@@ -11,10 +11,18 @@ from datetime import datetime
 # ==========================================
 # 0. INISIALISASI SESSION STATE
 # ==========================================
+# Untuk Admin
 if 'admin_logged_in' not in st.session_state:
     st.session_state.admin_logged_in = False
 if 'last_active' not in st.session_state:
     st.session_state.last_active = time.time()
+
+# Untuk Download Master
+if 'dl_logged_in' not in st.session_state:
+    st.session_state.dl_logged_in = False
+if 'dl_last_active' not in st.session_state:
+    st.session_state.dl_last_active = time.time()
+
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN & HIDE GITHUB LOGO
@@ -92,15 +100,15 @@ base_url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{PUBLIC_FILE_ID}
 
 
 # ------------------------------------------
-# ISI TAB 1: RESUME RUSAK PER TOKO (DIPERBARUI)
+# ISI TAB 1: RESUME RUSAK PER TOKO
 # ------------------------------------------
 with tab_resume:
     st.subheader("Resume Rusak")
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Resume_Rusak', 'Belum diatur')}`")
     st.write("")
 
-    # Kotak Pencarian Toko tetap dipertahankan
-    input_toko_res = st.text_input("🔍 Filter 4 Digit Kode Toko (Kosongkan untuk melihat Resume Default):", max_chars=4, placeholder="Contoh: F08C", key="input_res").upper()
+    # Pencarian Pintar: Bisa Kode Toko, Nama AM, atau Nama AS
+    input_toko_res = st.text_input("🔍 Filter Kode Toko / Nama AM / Nama AS:", placeholder="Contoh: F08C atau SUNARI", key="input_res").upper()
     btn_enter_res = st.button("Enter ↵", key="btn_res", type="primary")
 
     with st.spinner("Memuat data..."):
@@ -108,54 +116,51 @@ with tab_resume:
             resp_res = requests.get(base_url)
             if resp_res.status_code == 200:
                 df_res = pd.read_excel(BytesIO(resp_res.content), sheet_name='Resume_Rusak')
+                
+                # Pembersihan Data agar aman saat pencarian
                 df_res['TOKO'] = df_res['TOKO'].astype(str).str.strip().str.upper()
+                df_res['AM'] = df_res['AM'].fillna("").astype(str).str.strip().str.upper()
+                df_res['AS'] = df_res['AS'].fillna("").astype(str).str.strip().str.upper()
 
-                # Jika User Input Kode Toko Khusus
+                # Jika User Input Filter
                 if input_toko_res or btn_enter_res:
-                    if len(input_toko_res) < 4:
-                        st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
+                    # Logika Pencarian: Cek apakah input cocok dengan Toko, atau ada di dalam Nama AM, atau ada di Nama AS
+                    mask = (df_res['TOKO'] == input_toko_res) | (df_res['AM'].str.contains(input_toko_res)) | (df_res['AS'].str.contains(input_toko_res))
+                    filtered_res = df_res[mask].copy()
+                    
+                    if filtered_res.empty:
+                        st.warning(f"⚠️ Data untuk kata kunci '{input_toko_res}' tidak ditemukan.")
                     else:
-                        filtered_res = df_res[df_res['TOKO'] == input_toko_res].copy()
-                        if filtered_res.empty:
-                            st.warning(f"⚠️ Data untuk kode toko '{input_toko_res}' tidak ditemukan.")
-                        else:
-                            st.success(f"✅ Data ditemukan untuk toko: {input_toko_res}")
-                            st.dataframe(filtered_res.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                        st.success(f"✅ Menampilkan detail data untuk: {input_toko_res} ({len(filtered_res)} Toko ditemukan)")
+                        filtered_res.insert(0, 'NO', range(1, len(filtered_res) + 1))
+                        st.dataframe(filtered_res.style.format(format_ribuan), hide_index=True, use_container_width=True)
                 
                 # TAMPILAN DEFAULT (JIKA KOTAK PENCARIAN KOSONG)
                 else:
                     st.info("📌 Menampilkan Ringkasan (Resume) Data Kerusakan by Presentase (%).")
                     
-                    # 1. RESUME PER AM (Semua AM)
                     st.write("### 👥 Resume Rusak Per AM")
-                    # Grouping data per AM, menjumlahkan penjualan & rusak
                     df_am = df_res.groupby('AM', as_index=False)[['PENJ.BERSIH', 'RUSAK']].sum()
-                    # Menghitung persentase baru
                     df_am['%'] = (df_am['RUSAK'] / df_am['PENJ.BERSIH']) * 100
-                    df_am['%'] = df_am['%'].fillna(0) # Mencegah error jika penjualan 0
-                    # Sort berdasarkan % tertinggi
+                    df_am['%'] = df_am['%'].fillna(0) 
                     df_am = df_am.sort_values(by='%', ascending=False).copy()
                     df_am.insert(0, 'NO', range(1, len(df_am) + 1))
                     st.dataframe(df_am.style.format(format_ribuan), hide_index=True, use_container_width=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
 
-                    # 2. RESUME PER AS (TOP 10 SAJA)
                     st.write("### 👤 Top 10 Resume Rusak Per AS")
                     df_as = df_res.groupby('AS', as_index=False)[['PENJ.BERSIH', 'RUSAK']].sum()
                     df_as['%'] = (df_as['RUSAK'] / df_as['PENJ.BERSIH']) * 100
                     df_as['%'] = df_as['%'].fillna(0)
-                    df_as = df_as.sort_values(by='%', ascending=False).head(10).copy() # Ambil 10 Teratas
+                    df_as = df_as.sort_values(by='%', ascending=False).head(10).copy() 
                     df_as.insert(0, 'NO', range(1, len(df_as) + 1))
                     st.dataframe(df_as.style.format(format_ribuan), hide_index=True, use_container_width=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
 
-                    # 3. RESUME PER TOKO (TOP 10 SAJA)
                     st.write("### 🏪 Top 10 Resume Rusak Per Toko")
-                    # Ambil data asli, urutkan dari % tertinggi, ambil 10
                     df_toko = df_res.sort_values(by='%', ascending=False).head(10).copy()
-                    # Pilih kolom yang relevan saja agar rapi
                     df_toko = df_toko[['TOKO', 'NAMA', 'AM', 'AS', 'PENJ.BERSIH', 'RUSAK', '%']]
                     df_toko.insert(0, 'NO', range(1, len(df_toko) + 1))
                     st.dataframe(df_toko.style.format(format_ribuan), hide_index=True, use_container_width=True)
@@ -225,7 +230,6 @@ with tab_monitoring:
                                     "Avg Rusak": st.column_config.NumberColumn(format="%.2f")
                                 }
                             )
-
                             st.markdown("<br>", unsafe_allow_html=True)
                             
                             output = BytesIO()
@@ -255,7 +259,7 @@ with tab_dsi:
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FD', 'Belum diatur')}`")
     st.write("")
 
-    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Top 10):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
+    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Resume Default):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
     btn_enter_dsi = st.button("Enter ↵", key="btn_dsi", type="primary")
 
     with st.spinner("Memuat data..."):
@@ -297,7 +301,6 @@ with tab_dsi:
 
                             st.write(f"**Tabel Data DSI - {nama_toko_dsi}**")
                             st.dataframe(display_df_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
-
                             st.markdown("<br>", unsafe_allow_html=True)
                             
                             output_dsi = BytesIO()
@@ -312,11 +315,30 @@ with tab_dsi:
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
                 else:
-                    st.info("📌 Menampilkan Top 10 Toko dengan Potensi Rusak tertinggi (by Rupiah).")
+                    st.info("📌 Menampilkan Ringkasan (Resume) DSI by Rp Potensi Rusak tertinggi.")
+                    
+                    st.write("### 👥 Resume DSI Per AM")
+                    df_am_dsi = df_dsi.groupby('AM', as_index=False)[['POTENSI RUSAK', 'RP POTENSI RUSAK']].sum()
+                    df_am_dsi = df_am_dsi.sort_values(by="RP POTENSI RUSAK", ascending=False).copy()
+                    df_am_dsi.insert(0, 'NO', range(1, len(df_am_dsi) + 1))
+                    st.dataframe(df_am_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    st.write("### 👤 Top 10 Resume DSI Per AS")
+                    df_as_dsi = df_dsi.groupby('AS', as_index=False)[['POTENSI RUSAK', 'RP POTENSI RUSAK']].sum()
+                    df_as_dsi = df_as_dsi.sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
+                    df_as_dsi.insert(0, 'NO', range(1, len(df_as_dsi) + 1))
+                    st.dataframe(df_as_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    st.write("### 🏪 Top 10 Resume DSI Per Toko")
                     agg_dsi = df_dsi.groupby(['KODE_TOKO', 'NAMA', 'AM', 'AS'], as_index=False)[['POTENSI RUSAK', 'RP POTENSI RUSAK']].sum()
                     top_10_dsi = agg_dsi.sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
                     top_10_dsi.insert(0, 'NO', range(1, len(top_10_dsi) + 1))
                     st.dataframe(top_10_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
+            
             else:
                 st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
         except ValueError:
@@ -335,17 +357,48 @@ with tab_rekomendasi:
 
 
 # ------------------------------------------
-# ISI TAB 5: DOWNLOAD MASTER (PASSWORD: 321)
+# ISI TAB 5: DOWNLOAD MASTER (DIKUNCI & TIMEOUT)
 # ------------------------------------------
 with tab_download:
-    st.subheader("Download File Excel Master")
-    st.write("Masukkan password untuk mengunduh database master (seluruh sheet).")
     
-    pass_master = st.text_input("Password Download:", type="password", key="pass_master")
-    btn_enter_dl = st.button("Enter ↵", key="btn_dl", type="primary")
-    
-    if pass_master == "321":
-        st.success("🔓 Akses Diberikan!")
+    # Cek Timeout
+    if st.session_state.dl_logged_in:
+        time_elapsed_dl = time.time() - st.session_state.dl_last_active
+        if time_elapsed_dl > 300: # 300 detik = 5 menit
+            st.session_state.dl_logged_in = False
+            st.warning("⏱️ Sesi Download telah berakhir (Timeout 5 Menit). Silakan login kembali.")
+            time.sleep(2)
+            st.rerun()
+
+    # Form Login Download
+    if not st.session_state.dl_logged_in:
+        st.subheader("🔐 Login Download Master")
+        pass_master = st.text_input("Password Download:", type="password", key="pass_master")
+        if st.button("Login", key="btn_login_dl", type="primary"):
+            if pass_master == "321":
+                st.session_state.dl_logged_in = True
+                st.session_state.dl_last_active = time.time()
+                st.rerun()
+            else:
+                st.error("❌ Password Salah!")
+                
+    # Dashboard Download
+    else:
+        st.session_state.dl_last_active = time.time() # Update timer
+
+        col_dl_title, col_dl_logout = st.columns([4, 1])
+        with col_dl_title:
+            st.subheader("📥 Download File Excel Master")
+            st.success("🔓 Akses Diberikan!")
+        with col_dl_logout:
+            st.write("")
+            if st.button("🚪 Logout", key="btn_logout_dl", type="primary"):
+                st.session_state.dl_logged_in = False
+                st.rerun()
+
+        st.markdown("---")
+        st.write("Klik tombol di bawah untuk mengunduh seluruh database master Excel.")
+        
         try:
             resp_raw = requests.get(base_url)
             if resp_raw.status_code == 200:
@@ -360,8 +413,6 @@ with tab_download:
                 st.info("File master belum diunggah oleh Admin.")
         except Exception as e:
             st.error("Gagal mengambil file.")
-    elif pass_master != "":
-        st.error("❌ Password Salah!")
 
 
 # ------------------------------------------
@@ -369,6 +420,7 @@ with tab_download:
 # ------------------------------------------
 with tab_admin:
     
+    # Cek Timeout
     if st.session_state.admin_logged_in:
         time_elapsed = time.time() - st.session_state.last_active
         if time_elapsed > 300: 
@@ -377,10 +429,11 @@ with tab_admin:
             time.sleep(2) 
             st.rerun()
 
+    # Form Login Admin
     if not st.session_state.admin_logged_in:
         st.subheader("🔐 Login Admin")
         password_input = st.text_input("Masukkan Password Admin:", type="password", key="login_pass")
-        if st.button("Login", type="primary"):
+        if st.button("Login", key="btn_login_admin", type="primary"):
             if password_input == "icnbr034":
                 st.session_state.admin_logged_in = True
                 st.session_state.last_active = time.time() 
@@ -388,6 +441,7 @@ with tab_admin:
             else:
                 st.error("❌ Password Salah! Anda tidak memiliki akses.")
 
+    # Dashboard Admin
     else:
         st.session_state.last_active = time.time() 
 
@@ -397,7 +451,7 @@ with tab_admin:
             st.success("🔓 Login Berhasil! Selamat datang Admin.")
         with col_logout:
             st.write("") 
-            if st.button("🚪 Logout", type="primary"):
+            if st.button("🚪 Logout", key="btn_logout_admin", type="primary"):
                 st.session_state.admin_logged_in = False
                 st.rerun()
 
@@ -426,7 +480,7 @@ with tab_admin:
             "Rekomendasi": format_date(p_rek)
         }
 
-        if st.button("🔄 Simpan & Perbarui Tanggal Saja"):
+        if st.button("🔄 Simpan & Perbarui Tanggal Saja", type="secondary"):
             with st.spinner("Memperbarui tanggal di server..."):
                 try:
                     json_periode = json.dumps(dict_periode_baru)
