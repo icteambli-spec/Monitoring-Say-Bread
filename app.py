@@ -5,7 +5,7 @@ import cloudinary.uploader
 import requests
 from io import BytesIO
 import time
-from datetime import datetime
+import json
 
 # ==========================================
 # 1. KONFIGURASI HALAMAN & HIDE GITHUB LOGO
@@ -36,169 +36,348 @@ cloudinary.config(
 )
 
 PUBLIC_FILE_ID = "data_saybread.xlsx"
-PUBLIC_PERIODE_ID = "periode_saybread.txt"
+PUBLIC_PERIODE_ID = "periode_saybread.json"
 
 st.title("🍞 Monitoring Say Bread")
 
 # ==========================================
-# 3. MENU UTAMA MENGGUNAKAN TABS (DIPERBARUI)
+# 3. FUNGSI BANTU AMBIL PERIODE
 # ==========================================
-# Menambahkan tab baru "Cek DSI FD Say Bread"
-tab_monitoring, tab_dsi, tab_admin = st.tabs([
-    "📊 Monitoring Say Bread", 
-    "📈 Cek DSI FD Say Bread", 
+@st.cache_data(ttl=60)
+def get_periode_data():
+    cloud_name = st.secrets["CLOUDINARY_CLOUD_NAME"]
+    periode_url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{PUBLIC_PERIODE_ID}?t={int(time.time())}"
+    try:
+        resp = requests.get(periode_url)
+        if resp.status_code == 200:
+            return resp.json()
+    except:
+        pass
+    return {}
+
+# ==========================================
+# 4. MENU UTAMA MENGGUNAKAN TABS
+# ==========================================
+tab_resume, tab_monitoring, tab_dsi, tab_rekomendasi, tab_download, tab_admin = st.tabs([
+    "📊 Resume Rusak", 
+    "📈 Monitoring Say Bread", 
+    "🍞 Cek DSI FD Say Bread", 
+    "💡 Rekomendasi Produksi",
+    "📥 Download Master", 
     "🔐 Admin"
 ])
 
+periode_dict = get_periode_data()
+
+cloud_name = st.secrets["CLOUDINARY_CLOUD_NAME"]
+base_url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{PUBLIC_FILE_ID}?t={int(time.time())}"
+
 
 # ------------------------------------------
-# ISI TAB 1: MONITORING SAY BREAD
+# ISI TAB 1: RESUME RUSAK PER TOKO
+# ------------------------------------------
+with tab_resume:
+    st.subheader("Resume Rusak Per Toko")
+    st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Resume_Rusak', 'Belum diatur')}`")
+    st.write("")
+
+    input_toko_res = st.text_input("🔍 Filter 4 Digit Kode Toko (Kosongkan untuk melihat Top 20):", max_chars=4, placeholder="Contoh: F08C", key="input_res").upper()
+    btn_enter_res = st.button("Enter ↵", key="btn_res", type="primary")
+
+    with st.spinner("Memuat data..."):
+        try:
+            resp_res = requests.get(base_url)
+            if resp_res.status_code == 200:
+                df_res = pd.read_excel(BytesIO(resp_res.content), sheet_name='Resume_Rusak')
+                df_res['TOKO'] = df_res['TOKO'].astype(str).str.strip().str.upper()
+
+                # Jika User Input Kode Toko
+                if input_toko_res or btn_enter_res:
+                    if len(input_toko_res) < 4:
+                        st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
+                    else:
+                        filtered_res = df_res[df_res['TOKO'] == input_toko_res]
+                        if filtered_res.empty:
+                            st.warning(f"⚠️ Data untuk kode toko '{input_toko_res}' tidak ditemukan.")
+                        else:
+                            st.success(f"✅ Data ditemukan untuk toko: {input_toko_res}")
+                            st.dataframe(
+                                filtered_res, hide_index=True, use_container_width=True,
+                                column_config={
+                                    "PENJ.BERSIH": st.column_config.NumberColumn(format="%d"),
+                                    "RUSAK": st.column_config.NumberColumn(format="%d"),
+                                    "%": st.column_config.NumberColumn(format="%.2f")
+                                }
+                            )
+                
+                # Tampilan Default (Top 20 Rusak)
+                else:
+                    st.info("📌 Menampilkan Top 20 Toko dengan nilai Rusak tertinggi by Rupiah.")
+                    # Mengurutkan berdasarkan kolom RUSAK dari terbesar ke terkecil
+                    top_20_df = df_res.sort_values(by="RUSAK", ascending=False).head(20)
+                    
+                    st.dataframe(
+                        top_20_df, hide_index=True, use_container_width=True,
+                        column_config={
+                            "PENJ.BERSIH": st.column_config.NumberColumn(format="%d"),
+                            "RUSAK": st.column_config.NumberColumn(format="%d"),
+                            "%": st.column_config.NumberColumn(format="%.2f")
+                        }
+                    )
+            else:
+                st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
+        except ValueError:
+            st.error("❌ Sheet bernama 'Resume_Rusak' tidak ditemukan di file Excel Master!")
+        except Exception as e:
+            st.error(f"Terjadi kesalahan sistem: {e}")
+
+
+# ------------------------------------------
+# ISI TAB 2: MONITORING SAY BREAD
 # ------------------------------------------
 with tab_monitoring:
-    st.subheader("Pencarian Data Toko")
-    
-    cloud_name = st.secrets["CLOUDINARY_CLOUD_NAME"]
-    base_url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{PUBLIC_FILE_ID}"
-    periode_url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{PUBLIC_PERIODE_ID}"
-    
-    fetch_url = f"{base_url}?t={int(time.time())}"
-    fetch_periode_url = f"{periode_url}?t={int(time.time())}"
+    st.subheader("Monitoring Data Toko")
+    st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Monitoring', 'Belum diatur')}`")
+    st.write("")
 
-    try:
-        response = requests.get(fetch_url)
-        
-        teks_periode = "Belum diatur"
-        try:
-            resp_periode = requests.get(fetch_periode_url)
-            if resp_periode.status_code == 200:
-                teks_periode = resp_periode.text
-        except:
-            pass
-            
-        if response.status_code == 200:
-            df = pd.read_excel(BytesIO(response.content))
-            df['Toko'] = df['Toko'].astype(str).str.strip().str.upper()
+    input_toko_mon = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, placeholder="Contoh: F08C", key="input_mon").upper()
+    btn_enter_mon = st.button("Enter ↵", key="btn_mon", type="primary")
 
-            st.markdown(f"#### 📅 Periode Data: `{teks_periode}`")
-            st.write("")
+    if input_toko_mon or btn_enter_mon:
+        if len(input_toko_mon) < 4:
+            st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
+        elif len(input_toko_mon) == 4:
+            with st.spinner("Memuat data..."):
+                try:
+                    resp_mon = requests.get(base_url)
+                    if resp_mon.status_code == 200:
+                        df_mon = pd.read_excel(BytesIO(resp_mon.content), sheet_name='Monitoring')
+                        df_mon['Toko'] = df_mon['Toko'].astype(str).str.strip().str.upper()
 
-            # Kolom Input Kode Toko
-            input_toko = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, placeholder="Contoh: F08C").upper()
-            
-            # Tombol ENTER di bawah kolom input toko
-            btn_enter_toko = st.button("Enter ↵", key="btn_toko", type="primary")
+                        filtered_mon = df_mon[df_mon['Toko'] == input_toko_mon]
 
-            # Sistem akan memproses jika user menekan Enter di keyboard ATAU mengklik tombol Enter
-            if input_toko or btn_enter_toko:
-                if len(input_toko) < 4:
-                    st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
-                elif len(input_toko) == 4:
-                    filtered_df = df[df['Toko'] == input_toko]
+                        if filtered_mon.empty:
+                            st.warning(f"⚠️ Data untuk kode toko '{input_toko_mon}' tidak ditemukan di sheet Monitoring.")
+                        else:
+                            st.markdown("---")
+                            nama_toko = filtered_mon.iloc[0]['Nama']
+                            am_toko = filtered_mon.iloc[0]['AM']
+                            as_toko = filtered_mon.iloc[0]['AS']
 
-                    if filtered_df.empty:
-                        st.warning(f"⚠️ Data untuk kode toko '{input_toko}' tidak ditemukan.")
+                            col1, col2, col3 = st.columns(3)
+                            with col1: st.success(f"**🏷️ Nama Toko:**\n\n{nama_toko}")
+                            with col2: st.info(f"**👤 AM:**\n\n{am_toko}")
+                            with col3: st.warning(f"**👥 AS:**\n\n{as_toko}")
+                            
+                            st.write("")
+                            kolom_tampil = [
+                                'PLU Jual', 'Deskripsi', 'Qty Produksi', 'Qty Sales', 
+                                'QTY Total Rusak', '% Rusak By Qty', 'Avg Produksi', 
+                                'Avg Sales', 'Avg Rusak'
+                            ]
+                            
+                            kolom_tersedia = [col for col in kolom_tampil if col in filtered_mon.columns]
+                            display_df = filtered_mon[kolom_tersedia]
+
+                            st.write(f"**Tabel Data Item - {nama_toko}**")
+                            st.dataframe(
+                                display_df, hide_index=True, use_container_width=True,
+                                column_config={
+                                    "% Rusak By Qty": st.column_config.NumberColumn(format="%.2f"),
+                                    "Avg Produksi": st.column_config.NumberColumn(format="%.2f"),
+                                    "Avg Sales": st.column_config.NumberColumn(format="%.2f"),
+                                    "Avg Rusak": st.column_config.NumberColumn(format="%.2f")
+                                }
+                            )
+
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            output = BytesIO()
+                            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                filtered_mon.to_excel(writer, index=False, sheet_name='Monitoring_Toko')
+                            excel_data = output.getvalue()
+
+                            st.download_button(
+                                label=f"📥 Download Data Lengkap {input_toko_mon} (Excel)",
+                                data=excel_data,
+                                file_name=f"Monitoring_SayBread_{input_toko_mon}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
                     else:
-                        st.markdown("---")
-                        
-                        nama_toko = filtered_df.iloc[0]['Nama']
-                        am_toko = filtered_df.iloc[0]['AM']
-                        as_toko = filtered_df.iloc[0]['AS']
-
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.success(f"**🏷️ Nama Toko:**\n\n{nama_toko}")
-                        with col2:
-                            st.info(f"**👤 AM:**\n\n{am_toko}")
-                        with col3:
-                            st.warning(f"**👥 AS:**\n\n{as_toko}")
-                        
-                        st.write("")
-
-                        kolom_tampil = [
-                            'PLU Jual', 'Deskripsi', 'Qty Produksi', 'Qty Sales', 
-                            'QTY Total Rusak', '% Rusak By Qty', 'Avg Produksi', 
-                            'Avg Sales', 'Avg Rusak'
-                        ]
-                        
-                        kolom_tersedia = [col for col in kolom_tampil if col in filtered_df.columns]
-                        display_df = filtered_df[kolom_tersedia]
-
-                        st.write(f"**Tabel Data Item - {nama_toko}**")
-                        
-                        st.dataframe(
-                            display_df, 
-                            hide_index=True, 
-                            use_container_width=True,
-                            column_config={
-                                "% Rusak By Qty": st.column_config.NumberColumn(format="%.2f"),
-                                "Avg Produksi": st.column_config.NumberColumn(format="%.2f"),
-                                "Avg Sales": st.column_config.NumberColumn(format="%.2f"),
-                                "Avg Rusak": st.column_config.NumberColumn(format="%.2f")
-                            }
-                        )
-
-                        st.markdown("<br>", unsafe_allow_html=True)
-
-                        output = BytesIO()
-                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                            filtered_df.to_excel(writer, index=False, sheet_name='Data_Toko')
-                        excel_data = output.getvalue()
-
-                        st.download_button(
-                            label=f"📥 Download Data Lengkap {input_toko} (Excel)",
-                            data=excel_data,
-                            file_name=f"Data_SayBread_{input_toko}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        )
-        else:
-            st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
-            
-    except Exception as e:
-        st.error(f"Terjadi kesalahan sistem: {e}")
+                        st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
+                except ValueError:
+                    st.error("❌ Sheet bernama 'Monitoring' tidak ditemukan di file Excel Master!")
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan sistem: {e}")
 
 
 # ------------------------------------------
-# ISI TAB 2: CEK DSI FD SAY BREAD (COMING SOON)
+# ISI TAB 3: CEK DSI FD SAY BREAD
 # ------------------------------------------
 with tab_dsi:
     st.subheader("Cek DSI FD Say Bread")
-    
-    # Pesan Coming Soon
-    st.info("🚀 **Coming Soon!**\n\nFitur ini sedang dalam tahap pengembangan. Nantikan pembaruannya segera!")
-    
+    st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FD', 'Belum diatur')}`")
+    st.write("")
+
+    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
+    btn_enter_dsi = st.button("Enter ↵", key="btn_dsi", type="primary")
+
+    if input_toko_dsi or btn_enter_dsi:
+        if len(input_toko_dsi) < 4:
+            st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
+        elif len(input_toko_dsi) == 4:
+            with st.spinner("Memuat data..."):
+                try:
+                    resp_dsi = requests.get(base_url)
+                    if resp_dsi.status_code == 200:
+                        df_dsi = pd.read_excel(BytesIO(resp_dsi.content), sheet_name='DSI_FD')
+                        # Menyesuaikan dengan nama kolom di gambar (KODE_TOKO)
+                        df_dsi['KODE_TOKO'] = df_dsi['KODE_TOKO'].astype(str).str.strip().str.upper()
+
+                        filtered_dsi = df_dsi[df_dsi['KODE_TOKO'] == input_toko_dsi]
+
+                        if filtered_dsi.empty:
+                            st.warning(f"⚠️ Data untuk kode toko '{input_toko_dsi}' tidak ditemukan di sheet DSI_FD.")
+                        else:
+                            st.markdown("---")
+                            nama_toko_dsi = filtered_dsi.iloc[0]['NAMA']
+                            am_toko_dsi = filtered_dsi.iloc[0]['AM']
+                            as_toko_dsi = filtered_dsi.iloc[0]['AS']
+
+                            col1, col2, col3 = st.columns(3)
+                            with col1: st.success(f"**🏷️ Nama Toko:**\n\n{nama_toko_dsi}")
+                            with col2: st.info(f"**👤 AM:**\n\n{am_toko_dsi}")
+                            with col3: st.warning(f"**👥 AS:**\n\n{as_toko_dsi}")
+                            
+                            st.write("")
+                            
+                            # Mengurutkan otomatis berdasarkan RP POTENSI RUSAK (tertinggi di atas)
+                            filtered_dsi = filtered_dsi.sort_values(by="RP POTENSI RUSAK", ascending=False)
+                            
+                            kolom_tampil_dsi = [
+                                'PLU FD', 'DESC FD', 'Umur Produk', 'SPD', 'DSI', 
+                                'POTENSI RUSAK', 'RP POTENSI RUSAK', 'CEK DSI'
+                            ]
+                            
+                            kolom_tersedia_dsi = [col for col in kolom_tampil_dsi if col in filtered_dsi.columns]
+                            display_df_dsi = filtered_dsi[kolom_tersedia_dsi]
+
+                            st.write(f"**Tabel Data DSI - {nama_toko_dsi}**")
+                            st.dataframe(
+                                display_df_dsi, hide_index=True, use_container_width=True,
+                                column_config={
+                                    "SPD": st.column_config.NumberColumn(format="%.2f"),
+                                    "DSI": st.column_config.NumberColumn(format="%.2f"),
+                                    "POTENSI RUSAK": st.column_config.NumberColumn(format="%d"),
+                                    "RP POTENSI RUSAK": st.column_config.NumberColumn(format="%d")
+                                }
+                            )
+
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            # Logika Download Excel
+                            output_dsi = BytesIO()
+                            with pd.ExcelWriter(output_dsi, engine='openpyxl') as writer:
+                                filtered_dsi.to_excel(writer, index=False, sheet_name='DSI_Toko')
+                            excel_data_dsi = output_dsi.getvalue()
+
+                            st.download_button(
+                                label=f"📥 Download Data Lengkap {input_toko_dsi} (Excel)",
+                                data=excel_data_dsi,
+                                file_name=f"DSI_SayBread_{input_toko_dsi}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            )
+                    else:
+                        st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
+                except ValueError:
+                    st.error("❌ Sheet bernama 'DSI_FD' tidak ditemukan di file Excel Master!")
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan sistem: {e}")
+
 
 # ------------------------------------------
-# ISI TAB 3: ADMIN AREA
+# ISI TAB 4: REKOMENDASI PRODUKSI
+# ------------------------------------------
+with tab_rekomendasi:
+    st.subheader("Rekomendasi Produksi")
+    st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Rekomendasi', 'Belum diatur')}`")
+    st.info("🚀 **Coming Soon!**\n\nFitur ini sedang dalam tahap pengembangan.")
+
+
+# ------------------------------------------
+# ISI TAB 5: DOWNLOAD MASTER (PASSWORD: 321)
+# ------------------------------------------
+with tab_download:
+    st.subheader("Download File Excel Master")
+    st.write("Masukkan password untuk mengunduh database master (seluruh sheet).")
+    
+    pass_master = st.text_input("Password Download:", type="password", key="pass_master")
+    btn_enter_dl = st.button("Enter ↵", key="btn_dl", type="primary")
+    
+    if pass_master == "321":
+        st.success("🔓 Akses Diberikan!")
+        try:
+            resp_raw = requests.get(base_url)
+            if resp_raw.status_code == 200:
+                st.download_button(
+                    label="📥 DOWNLOAD FILE MASTER (.xlsx)",
+                    data=resp_raw.content,
+                    file_name="Master_Database_SayBread.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
+            else:
+                st.info("File master belum diunggah oleh Admin.")
+        except Exception as e:
+            st.error("Gagal mengambil file.")
+    elif pass_master != "":
+        st.error("❌ Password Salah!")
+
+
+# ------------------------------------------
+# ISI TAB 6: ADMIN AREA
 # ------------------------------------------
 with tab_admin:
     st.subheader("Halaman Admin")
     
     password_input = st.text_input("Masukkan Password Admin:", type="password", key="admin_pass")
-    
-    # Tombol ENTER di bawah kolom input password
     btn_enter_admin = st.button("Enter ↵", key="btn_admin", type="primary")
     
-    # Jika password benar
     if password_input == "icnbr034":
         st.success("🔓 Login Berhasil! Selamat datang Admin.")
         st.markdown("---")
         
-        st.write("**1. Tentukan Periode Data:**")
-        input_periode = st.date_input("Pilih Tanggal Periode (Bisa pilih rentang/range):", [])
+        st.write("### 1. Tentukan Periode Data per Sheet")
+        st.info("Anda bisa mengatur periode yang berbeda untuk tiap jenis laporan.")
         
-        if len(input_periode) == 2:
-            teks_periode_upload = f"{input_periode[0].strftime('%d %B %Y')} - {input_periode[1].strftime('%d %B %Y')}"
-        elif len(input_periode) == 1:
-            teks_periode_upload = f"{input_periode[0].strftime('%d %B %Y')}"
-        else:
-            teks_periode_upload = "Periode Tidak Ditentukan"
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            p_res = st.date_input("Periode [Resume Rusak]:", [])
+            p_mon = st.date_input("Periode [Monitoring]:", [])
+        with col_p2:
+            p_dsi = st.date_input("Periode [DSI FD]:", [])
+            p_rek = st.date_input("Periode [Rekomendasi]:", [])
 
-        st.write("**2. Upload File Excel Master:**")
+        def format_date(d_input):
+            if len(d_input) == 2: return f"{d_input[0].strftime('%d %B %Y')} - {d_input[1].strftime('%d %B %Y')}"
+            elif len(d_input) == 1: return f"{d_input[0].strftime('%d %B %Y')}"
+            return "Belum diatur"
+
+        dict_periode_baru = {
+            "Resume_Rusak": format_date(p_res),
+            "Monitoring": format_date(p_mon),
+            "DSI_FD": format_date(p_dsi),
+            "Rekomendasi": format_date(p_rek)
+        }
+
+        st.markdown("---")
+        st.write("### 2. Upload File Excel Master")
+        st.warning("Pastikan file Excel Anda memiliki nama sheet: **Resume_Rusak**, **Monitoring**, **DSI_FD**, dan **Rekomendasi**.")
         uploaded_file = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"], key="uploader")
         
         if uploaded_file is not None:
-            if st.button("📤 Upload & Perbarui Data"):
-                with st.spinner("Mengunggah data ke Cloudinary..."):
+            if st.button("📤 Upload & Perbarui Seluruh Sistem", type="primary"):
+                with st.spinner("Mengunggah data ke server..."):
                     try:
                         cloudinary.uploader.upload(
                             uploaded_file,
@@ -208,18 +387,18 @@ with tab_admin:
                             invalidate=True
                         )
                         
+                        json_periode = json.dumps(dict_periode_baru)
                         cloudinary.uploader.upload(
-                            BytesIO(teks_periode_upload.encode('utf-8')),
+                            BytesIO(json_periode.encode('utf-8')),
                             resource_type="raw",
                             public_id=PUBLIC_PERIODE_ID,
                             overwrite=True,
                             invalidate=True
                         )
                         
-                        st.success("✅ File dan Periode berhasil diperbarui! Silakan cek tab Monitoring.")
+                        st.success("✅ File Master dan Periode berhasil diperbarui! Seluruh menu web telah tersinkronisasi.")
                     except Exception as e:
                         st.error(f"❌ Gagal mengunggah file: {e}")
                         
-    # Jika diketik password dan salah
     elif password_input != "":
         st.error("❌ Password Salah! Anda tidak memiliki akses.")
