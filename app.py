@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 
 # ==========================================
-# 0. INISIALISASI SESSION STATE (UNTUK LOGIN ADMIN & TIMEOUT)
+# 0. INISIALISASI SESSION STATE
 # ==========================================
 if 'admin_logged_in' not in st.session_state:
     st.session_state.admin_logged_in = False
@@ -47,7 +47,7 @@ cloudinary.config(
 PUBLIC_FILE_ID = "data_saybread.xlsx"
 PUBLIC_PERIODE_ID = "periode_saybread.json"
 
-st.title("🍞 Monitoring Say Bread")
+st.title("🍞 Portal Say Bread")
 
 # ==========================================
 # 3. FUNGSI BANTU
@@ -92,14 +92,15 @@ base_url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{PUBLIC_FILE_ID}
 
 
 # ------------------------------------------
-# ISI TAB 1: RESUME RUSAK PER TOKO
+# ISI TAB 1: RESUME RUSAK PER TOKO (DIPERBARUI)
 # ------------------------------------------
 with tab_resume:
-    st.subheader("Resume Rusak Per Toko")
+    st.subheader("Resume Rusak")
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Resume_Rusak', 'Belum diatur')}`")
     st.write("")
 
-    input_toko_res = st.text_input("🔍 Filter 4 Digit Kode Toko (Kosongkan untuk melihat Top 20):", max_chars=4, placeholder="Contoh: F08C", key="input_res").upper()
+    # Kotak Pencarian Toko tetap dipertahankan
+    input_toko_res = st.text_input("🔍 Filter 4 Digit Kode Toko (Kosongkan untuk melihat Resume Default):", max_chars=4, placeholder="Contoh: F08C", key="input_res").upper()
     btn_enter_res = st.button("Enter ↵", key="btn_res", type="primary")
 
     with st.spinner("Memuat data..."):
@@ -109,6 +110,7 @@ with tab_resume:
                 df_res = pd.read_excel(BytesIO(resp_res.content), sheet_name='Resume_Rusak')
                 df_res['TOKO'] = df_res['TOKO'].astype(str).str.strip().str.upper()
 
+                # Jika User Input Kode Toko Khusus
                 if input_toko_res or btn_enter_res:
                     if len(input_toko_res) < 4:
                         st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
@@ -119,11 +121,45 @@ with tab_resume:
                         else:
                             st.success(f"✅ Data ditemukan untuk toko: {input_toko_res}")
                             st.dataframe(filtered_res.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                
+                # TAMPILAN DEFAULT (JIKA KOTAK PENCARIAN KOSONG)
                 else:
-                    st.info("📌 Menampilkan Top 20 Toko dengan nilai Rusak tertinggi (by Rupiah).")
-                    top_20_df = df_res.sort_values(by="RUSAK", ascending=False).head(20).copy()
-                    top_20_df.insert(0, 'NO', range(1, len(top_20_df) + 1))
-                    st.dataframe(top_20_df.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                    st.info("📌 Menampilkan Ringkasan (Resume) Data Kerusakan by Presentase (%).")
+                    
+                    # 1. RESUME PER AM (Semua AM)
+                    st.write("### 👥 Resume Rusak Per AM")
+                    # Grouping data per AM, menjumlahkan penjualan & rusak
+                    df_am = df_res.groupby('AM', as_index=False)[['PENJ.BERSIH', 'RUSAK']].sum()
+                    # Menghitung persentase baru
+                    df_am['%'] = (df_am['RUSAK'] / df_am['PENJ.BERSIH']) * 100
+                    df_am['%'] = df_am['%'].fillna(0) # Mencegah error jika penjualan 0
+                    # Sort berdasarkan % tertinggi
+                    df_am = df_am.sort_values(by='%', ascending=False).copy()
+                    df_am.insert(0, 'NO', range(1, len(df_am) + 1))
+                    st.dataframe(df_am.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    # 2. RESUME PER AS (TOP 10 SAJA)
+                    st.write("### 👤 Top 10 Resume Rusak Per AS")
+                    df_as = df_res.groupby('AS', as_index=False)[['PENJ.BERSIH', 'RUSAK']].sum()
+                    df_as['%'] = (df_as['RUSAK'] / df_as['PENJ.BERSIH']) * 100
+                    df_as['%'] = df_as['%'].fillna(0)
+                    df_as = df_as.sort_values(by='%', ascending=False).head(10).copy() # Ambil 10 Teratas
+                    df_as.insert(0, 'NO', range(1, len(df_as) + 1))
+                    st.dataframe(df_as.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    # 3. RESUME PER TOKO (TOP 10 SAJA)
+                    st.write("### 🏪 Top 10 Resume Rusak Per Toko")
+                    # Ambil data asli, urutkan dari % tertinggi, ambil 10
+                    df_toko = df_res.sort_values(by='%', ascending=False).head(10).copy()
+                    # Pilih kolom yang relevan saja agar rapi
+                    df_toko = df_toko[['TOKO', 'NAMA', 'AM', 'AS', 'PENJ.BERSIH', 'RUSAK', '%']]
+                    df_toko.insert(0, 'NO', range(1, len(df_toko) + 1))
+                    st.dataframe(df_toko.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
             else:
                 st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
         except ValueError:
@@ -136,7 +172,7 @@ with tab_resume:
 # ISI TAB 2: MONITORING SAY BREAD
 # ------------------------------------------
 with tab_monitoring:
-    st.subheader("Monitoring Produksi, Sales, Rusak Per Toko")
+    st.subheader("Monitoring Data Toko")
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Monitoring', 'Belum diatur')}`")
     st.write("")
 
@@ -219,7 +255,7 @@ with tab_dsi:
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FD', 'Belum diatur')}`")
     st.write("")
 
-    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko Untuk Melihat Detail Item Per Toko (Kosongkan untuk melihat Top 10 Toko Rusak Tertinggi):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
+    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Top 10):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
     btn_enter_dsi = st.button("Enter ↵", key="btn_dsi", type="primary")
 
     with st.spinner("Memuat data..."):
@@ -329,50 +365,44 @@ with tab_download:
 
 
 # ------------------------------------------
-# ISI TAB 6: ADMIN AREA (DENGAN TIMEOUT & LOGOUT)
+# ISI TAB 6: ADMIN AREA
 # ------------------------------------------
 with tab_admin:
     
-    # 1. CEK TIMEOUT (Jika sudah login, cek apakah sudah > 5 menit / 300 detik nganggur)
     if st.session_state.admin_logged_in:
         time_elapsed = time.time() - st.session_state.last_active
-        if time_elapsed > 300: # 300 detik = 5 menit
+        if time_elapsed > 300: 
             st.session_state.admin_logged_in = False
             st.warning("⏱️ Sesi Admin telah berakhir (Timeout 5 Menit). Silakan login kembali.")
-            time.sleep(2) # Jeda sebentar agar user bisa baca pesan errornya
-            st.rerun() # Refresh halaman
+            time.sleep(2) 
+            st.rerun()
 
-    # 2. HALAMAN LOGIN
     if not st.session_state.admin_logged_in:
         st.subheader("🔐 Login Admin")
         password_input = st.text_input("Masukkan Password Admin:", type="password", key="login_pass")
         if st.button("Login", type="primary"):
             if password_input == "icnbr034":
                 st.session_state.admin_logged_in = True
-                st.session_state.last_active = time.time() # Catat waktu masuk
-                st.rerun() # Refresh halaman untuk masuk ke dashboard admin
+                st.session_state.last_active = time.time() 
+                st.rerun() 
             else:
                 st.error("❌ Password Salah! Anda tidak memiliki akses.")
 
-    # 3. DASHBOARD ADMIN (JIKA LOGIN BERHASIL)
     else:
-        # Perbarui waktu aktif setiap kali Admin mengklik/berinteraksi di halaman ini
         st.session_state.last_active = time.time() 
 
-        # Header Dashboard Admin & Tombol Logout
         col_title, col_logout = st.columns([4, 1])
         with col_title:
             st.subheader("⚙️ Dashboard Admin")
             st.success("🔓 Login Berhasil! Selamat datang Admin.")
         with col_logout:
-            st.write("") # Spasi
+            st.write("") 
             if st.button("🚪 Logout", type="primary"):
                 st.session_state.admin_logged_in = False
                 st.rerun()
 
         st.markdown("---")
         
-        # BAGIAN 1: PENGATURAN PERIODE
         st.write("### 1. Pengaturan Periode Data")
         st.info("Atur periode di bawah ini. Anda bisa langsung memperbarui tanggalnya saja tanpa harus upload Excel lagi.")
         
@@ -396,7 +426,6 @@ with tab_admin:
             "Rekomendasi": format_date(p_rek)
         }
 
-        # TOMBOL 1: PERBARUI TANGGAL SAJA
         if st.button("🔄 Simpan & Perbarui Tanggal Saja"):
             with st.spinner("Memperbarui tanggal di server..."):
                 try:
@@ -414,17 +443,14 @@ with tab_admin:
 
         st.markdown("---")
         
-        # BAGIAN 2: UPLOAD EXCEL MASTER
         st.write("### 2. Upload File Excel Master")
         st.warning("Pastikan file Excel Anda memiliki sheet: **Resume_Rusak**, **Monitoring**, **DSI_FD**, dan **Rekomendasi**.")
         uploaded_file = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"], key="uploader")
         
-        # TOMBOL 2: UPLOAD EXCEL + TANGGAL
         if uploaded_file is not None:
             if st.button("📤 Upload Excel & Perbarui Semua", type="primary"):
                 with st.spinner("Mengunggah Excel dan Periode ke server..."):
                     try:
-                        # Upload Excel
                         cloudinary.uploader.upload(
                             uploaded_file,
                             resource_type="raw",
@@ -432,7 +458,6 @@ with tab_admin:
                             overwrite=True,
                             invalidate=True
                         )
-                        # Upload Tanggal
                         json_periode = json.dumps(dict_periode_baru)
                         cloudinary.uploader.upload(
                             BytesIO(json_periode.encode('utf-8')),
