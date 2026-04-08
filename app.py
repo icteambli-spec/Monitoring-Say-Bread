@@ -221,7 +221,7 @@ with tab_dsi:
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FD', 'Belum diatur')}`")
     st.write("")
 
-    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko Untuk Melihat Detail Item Per Toko (Kosongkan Kolom untuk melihat Top 10):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
+    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko Untuk Melihat Detail Item Per Toko (Kosongkan Kolom untuk melihat Top 10 Toko Potensi Rusak Tertinggi):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
     btn_enter_dsi = st.button("Enter ↵", key="btn_dsi", type="primary")
 
     with st.spinner("Memuat data..."):
