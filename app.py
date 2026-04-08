@@ -38,7 +38,7 @@ cloudinary.config(
 PUBLIC_FILE_ID = "data_saybread.xlsx"
 PUBLIC_PERIODE_ID = "periode_saybread.json"
 
-st.title("🍞 Monitoring Say Bread")
+st.title("🍞 Portal Say Bread")
 
 # ==========================================
 # 3. FUNGSI BANTU AMBIL PERIODE
@@ -72,6 +72,17 @@ periode_dict = get_periode_data()
 cloud_name = st.secrets["CLOUDINARY_CLOUD_NAME"]
 base_url = f"https://res.cloudinary.com/{cloud_name}/raw/upload/{PUBLIC_FILE_ID}?t={int(time.time())}"
 
+# Format Kamus (Style) untuk mengubah angka menjadi format ribuan
+format_ribuan = {
+    "PENJ.BERSIH": "{:,.0f}",
+    "RUSAK": "{:,.0f}",
+    "%": "{:.2f}",
+    "POTENSI RUSAK": "{:,.0f}",
+    "RP POTENSI RUSAK": "{:,.0f}",
+    "SPD": "{:.2f}",
+    "DSI": "{:.2f}"
+}
+
 
 # ------------------------------------------
 # ISI TAB 1: RESUME RUSAK PER TOKO
@@ -96,34 +107,25 @@ with tab_resume:
                     if len(input_toko_res) < 4:
                         st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
                     else:
-                        filtered_res = df_res[df_res['TOKO'] == input_toko_res]
+                        filtered_res = df_res[df_res['TOKO'] == input_toko_res].copy()
                         if filtered_res.empty:
                             st.warning(f"⚠️ Data untuk kode toko '{input_toko_res}' tidak ditemukan.")
                         else:
                             st.success(f"✅ Data ditemukan untuk toko: {input_toko_res}")
-                            st.dataframe(
-                                filtered_res, hide_index=True, use_container_width=True,
-                                column_config={
-                                    "PENJ.BERSIH": st.column_config.NumberColumn(format="%d"),
-                                    "RUSAK": st.column_config.NumberColumn(format="%d"),
-                                    "%": st.column_config.NumberColumn(format="%.2f")
-                                }
-                            )
+                            st.dataframe(filtered_res.style.format(format_ribuan), hide_index=True, use_container_width=True)
                 
                 # Tampilan Default (Top 20 Rusak)
                 else:
-                    st.info("📌 Menampilkan Top 20 Toko dengan nilai Rusak tertinggi by Rupiah.")
-                    # Mengurutkan berdasarkan kolom RUSAK dari terbesar ke terkecil
-                    top_20_df = df_res.sort_values(by="RUSAK", ascending=False).head(20)
+                    st.info("📌 Menampilkan Top 20 Toko dengan nilai Rusak tertinggi (by Rupiah).")
                     
-                    st.dataframe(
-                        top_20_df, hide_index=True, use_container_width=True,
-                        column_config={
-                            "PENJ.BERSIH": st.column_config.NumberColumn(format="%d"),
-                            "RUSAK": st.column_config.NumberColumn(format="%d"),
-                            "%": st.column_config.NumberColumn(format="%.2f")
-                        }
-                    )
+                    # Mengurutkan dari terbesar ke terkecil
+                    top_20_df = df_res.sort_values(by="RUSAK", ascending=False).head(20).copy()
+                    
+                    # Menambahkan nomor urut di paling kiri
+                    top_20_df.insert(0, 'NO', range(1, len(top_20_df) + 1))
+                    
+                    # Menampilkan tabel dengan format ribuan
+                    st.dataframe(top_20_df.style.format(format_ribuan), hide_index=True, use_container_width=True)
             else:
                 st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
         except ValueError:
@@ -219,22 +221,22 @@ with tab_dsi:
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FD', 'Belum diatur')}`")
     st.write("")
 
-    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
+    input_toko_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Top 10):", max_chars=4, placeholder="Contoh: F08C", key="input_dsi").upper()
     btn_enter_dsi = st.button("Enter ↵", key="btn_dsi", type="primary")
 
-    if input_toko_dsi or btn_enter_dsi:
-        if len(input_toko_dsi) < 4:
-            st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
-        elif len(input_toko_dsi) == 4:
-            with st.spinner("Memuat data..."):
-                try:
-                    resp_dsi = requests.get(base_url)
-                    if resp_dsi.status_code == 200:
-                        df_dsi = pd.read_excel(BytesIO(resp_dsi.content), sheet_name='DSI_FD')
-                        # Menyesuaikan dengan nama kolom di gambar (KODE_TOKO)
-                        df_dsi['KODE_TOKO'] = df_dsi['KODE_TOKO'].astype(str).str.strip().str.upper()
+    with st.spinner("Memuat data..."):
+        try:
+            resp_dsi = requests.get(base_url)
+            if resp_dsi.status_code == 200:
+                df_dsi = pd.read_excel(BytesIO(resp_dsi.content), sheet_name='DSI_FD')
+                df_dsi['KODE_TOKO'] = df_dsi['KODE_TOKO'].astype(str).str.strip().str.upper()
 
-                        filtered_dsi = df_dsi[df_dsi['KODE_TOKO'] == input_toko_dsi]
+                # Jika User Input Kode Toko
+                if input_toko_dsi or btn_enter_dsi:
+                    if len(input_toko_dsi) < 4:
+                        st.error("⚠️ Error: Kode toko harus terdiri dari 4 digit alfanumerik!")
+                    else:
+                        filtered_dsi = df_dsi[df_dsi['KODE_TOKO'] == input_toko_dsi].copy()
 
                         if filtered_dsi.empty:
                             st.warning(f"⚠️ Data untuk kode toko '{input_toko_dsi}' tidak ditemukan di sheet DSI_FD.")
@@ -251,7 +253,6 @@ with tab_dsi:
                             
                             st.write("")
                             
-                            # Mengurutkan otomatis berdasarkan RP POTENSI RUSAK (tertinggi di atas)
                             filtered_dsi = filtered_dsi.sort_values(by="RP POTENSI RUSAK", ascending=False)
                             
                             kolom_tampil_dsi = [
@@ -263,19 +264,11 @@ with tab_dsi:
                             display_df_dsi = filtered_dsi[kolom_tersedia_dsi]
 
                             st.write(f"**Tabel Data DSI - {nama_toko_dsi}**")
-                            st.dataframe(
-                                display_df_dsi, hide_index=True, use_container_width=True,
-                                column_config={
-                                    "SPD": st.column_config.NumberColumn(format="%.2f"),
-                                    "DSI": st.column_config.NumberColumn(format="%.2f"),
-                                    "POTENSI RUSAK": st.column_config.NumberColumn(format="%d"),
-                                    "RP POTENSI RUSAK": st.column_config.NumberColumn(format="%d")
-                                }
-                            )
+                            # Format ribuan diaplikasikan ke detail DSI
+                            st.dataframe(display_df_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
 
                             st.markdown("<br>", unsafe_allow_html=True)
                             
-                            # Logika Download Excel
                             output_dsi = BytesIO()
                             with pd.ExcelWriter(output_dsi, engine='openpyxl') as writer:
                                 filtered_dsi.to_excel(writer, index=False, sheet_name='DSI_Toko')
@@ -287,12 +280,29 @@ with tab_dsi:
                                 file_name=f"DSI_SayBread_{input_toko_dsi}.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                             )
-                    else:
-                        st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
-                except ValueError:
-                    st.error("❌ Sheet bernama 'DSI_FD' tidak ditemukan di file Excel Master!")
-                except Exception as e:
-                    st.error(f"Terjadi kesalahan sistem: {e}")
+                
+                # Tampilan Default DSI (Top 10 Resume)
+                else:
+                    st.info("📌 Menampilkan Top 10 Toko dengan Potensi Rusak tertinggi (by Rupiah).")
+                    
+                    # Grouping data per Toko & menjumlahkan potensi rusaknya
+                    agg_dsi = df_dsi.groupby(['KODE_TOKO', 'NAMA', 'AM', 'AS'], as_index=False)[['POTENSI RUSAK', 'RP POTENSI RUSAK']].sum()
+                    
+                    # Urutkan berdasarkan Rupiah Potensi Rusak
+                    top_10_dsi = agg_dsi.sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
+                    
+                    # Tambahkan penomoran 1-10 di kolom pertama
+                    top_10_dsi.insert(0, 'NO', range(1, len(top_10_dsi) + 1))
+                    
+                    # Tampilkan dengan format ribuan
+                    st.dataframe(top_10_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+            else:
+                st.info("ℹ️ Belum ada data sumber yang diunggah oleh Admin.")
+        except ValueError:
+            st.error("❌ Sheet bernama 'DSI_FD' tidak ditemukan di file Excel Master!")
+        except Exception as e:
+            st.error(f"Terjadi kesalahan sistem: {e}")
 
 
 # ------------------------------------------
