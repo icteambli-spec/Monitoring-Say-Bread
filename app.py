@@ -136,7 +136,7 @@ with tab_resume:
 # ISI TAB 2: MONITORING SAY BREAD
 # ------------------------------------------
 with tab_monitoring:
-    st.subheader("Monitoring Data Toko")
+    st.subheader("Monitoring Produksi, Sales, Rusak Per Toko")
     st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Monitoring', 'Belum diatur')}`")
     st.write("")
 
