@@ -334,7 +334,7 @@ with tab_rekomendasi:
                                 avg_sales = row['Avg Sales']
                                 sisa_fisik = row['✍️ Input Sisa Fisik']
                                 # Rumus = MAX(2, ROUNDUP(Avg Sales * 1.05 - Sisa Fisik))
-                                kalkulasi = (avg_sales * 0.05) - sisa_fisik
+                                kalkulasi = (avg_sales * 1.05) - sisa_fisik
                                 rekomendasi = max(2, math.ceil(kalkulasi))
                                 return rekomendasi
 
