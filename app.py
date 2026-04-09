@@ -108,7 +108,7 @@ with tab_resume:
     st.write("")
 
     # Pencarian Pintar: Bisa Kode Toko, Nama AM, atau Nama AS
-    input_toko_res = st.text_input("🔍 Filter Kode Toko / Nama AM / Nama AS:", placeholder="Contoh: F08C atau SUNARI", key="input_res").upper()
+    input_toko_res = st.text_input("🔍 Filter Kode Toko / Nama AM / Nama AS:", placeholder="Contoh: F08C atau SNI", key="input_res").upper()
     btn_enter_res = st.button("Enter ↵", key="btn_res", type="primary")
 
     with st.spinner("Memuat data..."):
