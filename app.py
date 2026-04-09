@@ -304,14 +304,14 @@ with tab_rekomendasi:
                             with col3: st.warning(f"**👥 AS:**\n\n{filtered_rek.iloc[0]['AS']}")
                             
                             st.write("")
-                            st.info("👇 **PANDUAN:** Silakan klik dua kali pada kolom **[ ✍️ Input Sisa Fisik ]** di tabel bawah ini untuk mengubah angka. Kolom **[ 🎯 Rekomendasi Produksi ]** akan otomatis menghitung hasilnya.")
+                            st.info("👇 **PANDUAN:** Silakan klik dua kali pada sel kosong di bawah kolom **[ ✍️ Input Sisa Fisik ]** untuk mengetik angka. Kolom **[ 🎯 Rekomendasi Produksi ]** akan otomatis menghitung hasilnya.")
 
                             # Siapkan Data Dasar
                             base_df = filtered_rek[['PLU Jual', 'Deskripsi', 'Avg Sales']].copy()
                             base_df['Avg Sales'] = base_df['Avg Sales'].fillna(0)
                             
-                            # Buat kolom baru untuk diinput user (Default = 0)
-                            base_df['✍️ Input Sisa Fisik'] = 0
+                            # KUNCI: Kolom diisi dengan None (Blank/Kosong), bukan angka 0
+                            base_df['✍️ Input Sisa Fisik'] = None
 
                             # Render Tabel Interaktif (Data Editor)
                             edited_df = st.data_editor(
@@ -324,7 +324,7 @@ with tab_rekomendasi:
                                     ),
                                     "Avg Sales": st.column_config.NumberColumn(format="%.2f")
                                 },
-                                disabled=['PLU Jual', 'Deskripsi', 'Avg Sales'], # Kolom ini dikunci agar tidak bisa diedit
+                                disabled=['PLU Jual', 'Deskripsi', 'Avg Sales'], # Dikunci
                                 hide_index=True,
                                 use_container_width=True
                             )
@@ -333,20 +333,31 @@ with tab_rekomendasi:
                             def hitung_rekomendasi(row):
                                 avg_sales = row['Avg Sales']
                                 sisa_fisik = row['✍️ Input Sisa Fisik']
-                                # Rumus = MAX(2, ROUNDUP(Avg Sales * 1.05 - Sisa Fisik))
-                                kalkulasi = (avg_sales * 1.05) - sisa_fisik
+                                
+                                # Jika sel Sisa Fisik kosong/belum diinput, jangan lakukan perhitungan
+                                if pd.isna(sisa_fisik) or sisa_fisik is None or sisa_fisik == "":
+                                    return None
+                                
+                                # Rumus = MAX(2, ROUNDUP(Avg Sales + (Avg Sales * 0.05) - Sisa Fisik, 0))
+                                kalkulasi = (avg_sales + (avg_sales * 0.05)) - float(sisa_fisik)
                                 rekomendasi = max(2, math.ceil(kalkulasi))
                                 return rekomendasi
 
-                            # Menambahkan hasil perhitungan ke DataFrame
+                            # Menambahkan hasil perhitungan ke DataFrame Baru
                             edited_df['🎯 Rekomendasi Produksi'] = edited_df.apply(hitung_rekomendasi, axis=1)
 
                             st.markdown("---")
                             st.write("### 📈 Hasil Akhir Rekomendasi")
+                            
+                            # Format tabel akhir agar angka rekomendasi tidak berdesimal (format %d)
                             st.dataframe(
                                 edited_df[['PLU Jual', 'Deskripsi', 'Avg Sales', '✍️ Input Sisa Fisik', '🎯 Rekomendasi Produksi']], 
                                 hide_index=True, 
-                                use_container_width=True
+                                use_container_width=True,
+                                column_config={
+                                    "🎯 Rekomendasi Produksi": st.column_config.NumberColumn(format="%d"),
+                                    "✍️ Input Sisa Fisik": st.column_config.NumberColumn(format="%d")
+                                }
                             )
 
                             # Download Hasil Kalkulasi
