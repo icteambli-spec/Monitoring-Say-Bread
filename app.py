@@ -304,7 +304,7 @@ with tab_rekomendasi:
                             with col3: st.warning(f"**👥 AS:**\n\n{filtered_rek.iloc[0]['AS']}")
                             
                             st.write("")
-                            st.info("👇 **PANDUAN:** Silakan klik dua kali pada sel kosong di bawah kolom **[ ✍️ Input Sisa Fisik ]** untuk mengetik angka. Kolom **[ 🎯 Rekomendasi Produksi ]** akan otomatis menghitung hasilnya.")
+                            st.info("👇 **PANDUAN:** Silakan klik dua kali pada sel kosong di bawah kolom **[ ✍️ Input Sisa Fisik ]** untuk mengetik angka. Kolom **[ 🎯 Rekomendasi Produksi ]** akan otomatis menghitung hasilnya.Panduan produksi ini berdasarkan rata-rata sales dan toleransi rusak 5% minggu sebelumnya")
 
                             # Siapkan Data Dasar
                             base_df = filtered_rek[['PLU Jual', 'Deskripsi', 'Avg Sales']].copy()
