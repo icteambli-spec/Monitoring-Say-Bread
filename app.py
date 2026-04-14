@@ -174,7 +174,7 @@ elif st.session_state.current_page == "Say Bread":
                             st.dataframe(df_toko.style.format(format_ribuan), hide_index=True, use_container_width=True)
                 except Exception as e: st.error(f"Error: {e}")
 
-    # --- TAB 2: MONITORING ---
+    # --- TAB 2: MONITORING SAY BREAD ---
     with tab_monitoring:
         st.subheader("Monitoring Data Toko")
         st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Monitoring', 'Belum diatur')}`")
@@ -185,11 +185,17 @@ elif st.session_state.current_page == "Say Bread":
                     resp = requests.get(base_url)
                     df_mon = pd.read_excel(BytesIO(resp.content), sheet_name='Monitoring')
                     df_mon['Toko'] = df_mon['Toko'].astype(str).str.strip().str.upper()
-                    filtered = df_mon[df_mon['Toko'] == input_toko_mon]
+                    filtered = df_mon[df_mon['Toko'] == input_toko_mon].copy()
                     if not filtered.empty:
                         st.success(f"**Toko:** {filtered.iloc[0]['Nama']} | **AM:** {filtered.iloc[0]['AM']} | **AS:** {filtered.iloc[0]['AS']}")
+                        
+                        # LOGIKA BARU: Diurutkan berdasarkan % Rusak By Qty dari tertinggi
+                        if '% Rusak By Qty' in filtered.columns:
+                            filtered = filtered.sort_values(by='% Rusak By Qty', ascending=False)
+
                         cols = ['PLU Jual', 'Deskripsi', 'Qty Produksi', 'Qty Sales', 'QTY Total Rusak', '% Rusak By Qty', 'Avg Produksi', 'Avg Sales', 'Avg Rusak']
                         display_df = filtered[[c for c in cols if c in filtered.columns]]
+                        
                         st.dataframe(display_df, hide_index=True, use_container_width=True, column_config={
                             "% Rusak By Qty": st.column_config.NumberColumn(format="%.2f"),
                             "Avg Produksi": st.column_config.NumberColumn(format="%.2f"),
@@ -200,16 +206,17 @@ elif st.session_state.current_page == "Say Bread":
                     else: st.warning("Data tidak ditemukan.")
                 except Exception as e: st.error(f"Error: {e}")
 
-    # --- TAB 3: DSI FD ---
+    # --- TAB 3: DSI FD SAY BREAD ---
     with tab_dsi:
         st.subheader("Cek DSI FD Say Bread")
         st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FD', 'Belum diatur')}`")
-        input_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, key="sb_dsi").upper()
+        input_dsi = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Resume Default):", max_chars=4, key="sb_dsi").upper()
         if input_dsi or st.button("Enter ↵", key="btn_sb_dsi", type="primary"):
             try:
                 resp = requests.get(base_url)
                 df_dsi = pd.read_excel(BytesIO(resp.content), sheet_name='DSI_FD')
                 df_dsi['KODE_TOKO'] = df_dsi['KODE_TOKO'].astype(str).str.strip().str.upper()
+                
                 if len(input_dsi) == 4:
                     filtered = df_dsi[df_dsi['KODE_TOKO'] == input_dsi].sort_values(by="RP POTENSI RUSAK", ascending=False)
                     if not filtered.empty:
@@ -220,11 +227,22 @@ elif st.session_state.current_page == "Say Bread":
                     else: st.warning("Data tidak ditemukan.")
                 else:
                     st.write("### 👥 Resume DSI Per AM")
-                    df_am_dsi = df_dsi.groupby('AM', as_index=False)[['POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False)
+                    df_am_dsi = df_dsi.groupby('AM', as_index=False)[['POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).copy()
+                    df_am_dsi.insert(0, 'NO', range(1, len(df_am_dsi) + 1))
                     st.dataframe(df_am_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                    st.write("### 👤 Top 10 Resume DSI Per AS")
+                    df_as_dsi = df_dsi.groupby('AS', as_index=False)[['POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
+                    df_as_dsi.insert(0, 'NO', range(1, len(df_as_dsi) + 1))
+                    st.dataframe(df_as_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                    st.write("### 🏪 Top 10 Resume DSI Per Toko")
+                    agg_dsi = df_dsi.groupby(['KODE_TOKO', 'NAMA', 'AM', 'AS'], as_index=False)[['POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
+                    agg_dsi.insert(0, 'NO', range(1, len(agg_dsi) + 1))
+                    st.dataframe(agg_dsi.style.format(format_ribuan), hide_index=True, use_container_width=True)
             except Exception as e: st.error(f"Error: {e}")
 
-    # --- TAB 4: REKOMENDASI ---
+    # --- TAB 4: REKOMENDASI PRODUKSI ---
     with tab_rekomendasi:
         st.subheader("💡 Rekomendasi Produksi (Interaktif)")
         st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Rekomendasi', 'Belum diatur')}`")
@@ -242,7 +260,9 @@ elif st.session_state.current_page == "Say Bread":
                         base_df['Avg Sales'] = base_df['Avg Sales'].fillna(0)
                         base_df['✍️ Input Sisa Fisik'] = None
                         
-                        st.info("👇 Klik ganda pada sel kosong di bawah kolom **[✍️ Input Sisa Fisik]** untuk mengetik angka.")
+                        # LOGIKA BARU: Pesan Panduan Lengkap
+                        st.info("👇 **PANDUAN:** Silakan klik dua kali pada sel kosong di bawah kolom **[ ✍️ Input Sisa Fisik ]** untuk mengetik angka. Kolom **[ 🎯 Rekomendasi Produksi ]** akan otomatis menghitung hasilnya.\n\n*Panduan produksi ini berdasarkan rata-rata sales dan toleransi rusak 5% minggu sebelumnya.*")
+                        
                         edited_df = st.data_editor(base_df, hide_index=True, use_container_width=True, disabled=['PLU Jual', 'Deskripsi', 'Avg Sales'],
                             column_config={"✍️ Input Sisa Fisik": st.column_config.NumberColumn(min_value=0, step=1), "Avg Sales": st.column_config.NumberColumn(format="%.2f")})
 
@@ -280,44 +300,45 @@ elif st.session_state.current_page == "Fried Chicken":
                 if resp.status_code == 200:
                     df_fc = pd.read_excel(BytesIO(resp.content), sheet_name='DSI_FC')
                     
-                    # Pembersihan & Penyesuaian Nama Kolom
                     df_fc['KODE_TOKO'] = df_fc['KODE_TOKO'].astype(str).str.strip().str.upper()
                     df_fc = df_fc.rename(columns={'POTENSI RUSAK': 'QTY POTENSI RUSAK', 'NAMA': 'NAMA TOKO'})
 
                     if len(input_fc) == 4:
-                        # TAMPILAN FILTER (DETAIL PER TOKO)
                         filtered_fc = df_fc[df_fc['KODE_TOKO'] == input_fc].copy()
                         if filtered_fc.empty:
                             st.warning(f"⚠️ Data untuk kode toko '{input_fc}' tidak ditemukan di sheet DSI_FC.")
                         else:
                             st.success(f"✅ Data ditemukan untuk toko: {input_fc}")
-                            # Diurutkan berdasarkan RP POTENSI RUSAK tertinggi
                             filtered_fc = filtered_fc.sort_values(by="RP POTENSI RUSAK", ascending=False)
                             
                             kolom_tampil_fc = ['KODE_TOKO', 'NAMA TOKO', 'DSI', 'SPD', 'QTY POTENSI RUSAK', 'RP POTENSI RUSAK']
                             display_df_fc = filtered_fc[[c for c in kolom_tampil_fc if c in filtered_fc.columns]]
-
                             st.dataframe(display_df_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
                             
-                            # Tombol Download
                             out_fc = BytesIO()
                             with pd.ExcelWriter(out_fc, engine='openpyxl') as writer:
                                 filtered_fc.to_excel(writer, index=False, sheet_name='DSI_FriedChicken')
                             st.download_button("📥 Download Data Lengkap (Excel)", data=out_fc.getvalue(), file_name=f"DSI_FC_{input_fc}.xlsx", type="primary")
                     
                     else:
-                        # TAMPILAN DEFAULT (RESUME)
                         st.info("📌 Menampilkan Ringkasan DSI FC by Rp Potensi Rusak tertinggi.")
                         
-                        # Grouping by AM, AS, KODE_TOKO
-                        agg_fc = df_fc.groupby(['AM', 'AS', 'KODE_TOKO'], as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum()
-                        agg_fc = agg_fc.sort_values(by="RP POTENSI RUSAK", ascending=False).copy()
-                        
-                        # Menyusun urutan kolom yang diminta: AM, AS, KODE_TOKO, QTY POTENSI RUSAK, RP POTENSI RUSAK
-                        agg_fc = agg_fc[['AM', 'AS', 'KODE_TOKO', 'QTY POTENSI RUSAK', 'RP POTENSI RUSAK']]
+                        # LOGIKA BARU: Tampilkan Resume per AM, per AS, dan per Toko
+                        st.write("### 👥 Resume DSI FC Per AM")
+                        df_am_fc = df_fc.groupby('AM', as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).copy()
+                        df_am_fc.insert(0, 'NO', range(1, len(df_am_fc) + 1))
+                        st.dataframe(df_am_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                        st.write("### 👤 Top 10 Resume DSI FC Per AS")
+                        df_as_fc = df_fc.groupby('AS', as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
+                        df_as_fc.insert(0, 'NO', range(1, len(df_as_fc) + 1))
+                        st.dataframe(df_as_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                        st.write("### 🏪 Top 10 Resume DSI FC Per Toko")
+                        agg_fc = df_fc.groupby(['KODE_TOKO', 'NAMA TOKO', 'AM', 'AS'], as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
                         agg_fc.insert(0, 'NO', range(1, len(agg_fc) + 1))
-                        
                         st.dataframe(agg_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                        
                 else:
                     st.info("File Master belum diunggah oleh Admin.")
             except ValueError:
@@ -366,7 +387,7 @@ elif st.session_state.current_page == "Admin":
         c1, c2, c3 = st.columns(3)
         with c1: p_res = st.date_input("Periode [Resume Rusak]:", []); p_mon = st.date_input("Periode [Monitoring SB]:", [])
         with c2: p_dsi = st.date_input("Periode [DSI SB]:", []); p_rek = st.date_input("Periode [Rekomendasi]:", [])
-        with c3: p_fc = st.date_input("Periode [DSI FC]:", []) # Tambahan untuk Fried Chicken
+        with c3: p_fc = st.date_input("Periode [DSI FC]:", [])
 
         def fd(d): return f"{d[0].strftime('%d %b %Y')} - {d[1].strftime('%d %b %Y')}" if len(d)==2 else (d[0].strftime('%d %b %Y') if len(d)==1 else "Belum diatur")
 
@@ -393,5 +414,5 @@ elif st.session_state.current_page == "Admin":
         try:
             resp_raw = requests.get(base_url)
             if resp_raw.status_code == 200:
-                st.download_button("📥 DOWNLOAD FILE MASTER SEKARANG (.xlsx)", data=resp_raw.content, file_name="Master_Database_SayBread_FC.xlsx", type="primary")
+                st.download_button("📥 DOWNLOAD FILE MASTER SEKARANG (.xlsx)", data=resp_raw.content, file_name="Master_Database_ProdukKhusus.xlsx", type="primary")
         except: st.error("Gagal memuat file.")
