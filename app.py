@@ -184,7 +184,7 @@ elif st.session_state.current_page == "Say Bread":
 
     # --- TAB 2: MONITORING ---
     with tab_monitoring:
-        st.subheader("Monitoring Data Toko")
+        st.subheader("Monitoring Produksi, Sales, Rusak")
         st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Monitoring', 'Belum diatur')}`")
         input_toko_mon = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, key="sb_mon").upper()
         btn_enter_mon = st.button("Enter ↵", key="btn_sb_mon", type="primary")
