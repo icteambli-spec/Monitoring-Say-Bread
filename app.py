@@ -133,7 +133,7 @@ elif st.session_state.current_page == "Say Bread":
     with tab_resume:
         st.subheader("Resume Rusak")
         st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Resume_Rusak', 'Belum diatur')}`")
-        input_toko_res = st.text_input("🔍 Filter Kode Toko / Nama AM / Nama AS:", placeholder="Contoh: F08C atau SUNARI", key="sb_res").upper()
+        input_toko_res = st.text_input("🔍 Filter Kode Toko / Nama AM / Nama AS:", placeholder="Contoh: F08C atau SNI", key="sb_res").upper()
         btn_enter_res = st.button("Enter ↵", key="btn_sb_res", type="primary")
 
         with st.spinner("Memuat data..."):
@@ -180,7 +180,7 @@ elif st.session_state.current_page == "Say Bread":
 
     # --- TAB 2: MONITORING ---
     with tab_monitoring:
-        st.subheader("Monitoring Data Toko")
+        st.subheader("Monitoring Produksi, Sales, Rusak Per Toko")
         st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Monitoring', 'Belum diatur')}`")
         input_toko_mon = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, key="sb_mon").upper()
         btn_enter_mon = st.button("Enter ↵", key="btn_sb_mon", type="primary")
