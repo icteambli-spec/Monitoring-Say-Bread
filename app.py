@@ -7,6 +7,7 @@ from io import BytesIO
 import time
 import json
 import math
+import numpy as np
 from datetime import datetime
 
 # ==========================================
@@ -77,7 +78,14 @@ format_ribuan = {
     "QTY POTENSI RUSAK": "{:,.0f}",
     "RP POTENSI RUSAK": "{:,.0f}",
     "SPD": "{:.2f}",
-    "DSI": "{:.2f}"
+    "DSI": "{:.2f}",
+    "QTY PRODUKSI": "{:,.0f}",
+    "RP PRODUKSI": "{:,.0f}",
+    "QTY SALES": "{:,.0f}",
+    "RP SALES": "{:,.0f}",
+    "QTY RUSAK": "{:,.0f}",
+    "RP RUSAK": "{:,.0f}",
+    "% RUSAK": "{:.2f}"
 }
 
 periode_dict = get_periode_data()
@@ -133,7 +141,7 @@ elif st.session_state.current_page == "Say Bread":
     with tab_resume:
         st.subheader("Resume Rusak")
         st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Resume_Rusak', 'Belum diatur')}`")
-        input_toko_res = st.text_input("🔍 Filter Kode Toko / Nama AM / Nama AS:", placeholder="Contoh: F08C atau SNI", key="sb_res").upper()
+        input_toko_res = st.text_input("🔍 Filter Kode Toko / Nama AM / Nama AS:", placeholder="Contoh: F08C atau SUNARI", key="sb_res").upper()
         btn_enter_res = st.button("Enter ↵", key="btn_sb_res", type="primary")
 
         with st.spinner("Memuat data..."):
@@ -180,7 +188,7 @@ elif st.session_state.current_page == "Say Bread":
 
     # --- TAB 2: MONITORING ---
     with tab_monitoring:
-        st.subheader("Monitoring Produksi, Sales, Rusak Per Toko")
+        st.subheader("Monitoring Data Toko")
         st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Monitoring', 'Belum diatur')}`")
         input_toko_mon = st.text_input("🔍 Masukkan 4 Digit Kode Toko:", max_chars=4, key="sb_mon").upper()
         btn_enter_mon = st.button("Enter ↵", key="btn_sb_mon", type="primary")
@@ -195,7 +203,6 @@ elif st.session_state.current_page == "Say Bread":
                     
                     if not filtered.empty:
                         st.success(f"**Toko:** {filtered.iloc[0]['Nama']} | **AM:** {filtered.iloc[0]['AM']} | **AS:** {filtered.iloc[0]['AS']}")
-                        
                         if '% Rusak By Qty' in filtered.columns:
                             filtered = filtered.sort_values(by='% Rusak By Qty', ascending=False)
                             
@@ -284,7 +291,7 @@ elif st.session_state.current_page == "Say Bread":
                         st.markdown("---"); st.write("### 📈 Hasil Akhir Rekomendasi")
                         st.dataframe(edited_df, hide_index=True, use_container_width=True, column_config={"🎯 Rekomendasi Produksi": st.column_config.NumberColumn(format="%d"), "✍️ Input Sisa Fisik": st.column_config.NumberColumn(format="%d")})
                         
-                        out = BytesIO(); edited_df.to_excel(out, index=False); st.download_button("📥 Download", data=out.getvalue(), file_name=f"Rek_{input_rek}.xlsx", type="primary")
+                        out = BytesIO(); edited_df.to_excel(out, index=False); st.download_button("📥 Download Excel", data=out.getvalue(), file_name=f"Rek_{input_rek}.xlsx", type="primary")
                     else: st.warning("Data tidak ditemukan.")
                 except Exception as e: st.error(f"Error: {e}")
 
@@ -299,63 +306,138 @@ elif st.session_state.current_page == "Fried Chicken":
     with col_title:
         st.title("🍗 Portal Monitoring Fried Chicken")
 
-    st.subheader("Cek DSI Raw Fried Chicken")
-    st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FC', 'Belum diatur')}`")
-    
-    input_fc = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Resume Default):", max_chars=4, key="fc_dsi").upper()
-    btn_enter_fc = st.button("Enter ↵", key="btn_fc_dsi", type="primary")
+    # MENGGUNAKAN TABS UNTUK FRIED CHICKEN
+    tab_dsi_fc, tab_rusak_fc = st.tabs([
+        "📈 Cek DSI Raw Fried Chicken", "📊 Cek Rusak Fried Chicken Per Toko"
+    ])
 
-    with st.spinner("Memuat data Fried Chicken..."):
-        try:
-            resp = requests.get(base_url)
-            if resp.status_code == 200:
-                df_fc = pd.read_excel(BytesIO(resp.content), sheet_name='DSI_FC')
-                
-                df_fc['KODE_TOKO'] = df_fc['KODE_TOKO'].astype(str).str.strip().str.upper()
-                df_fc = df_fc.rename(columns={'POTENSI RUSAK': 'QTY POTENSI RUSAK', 'NAMA': 'NAMA TOKO'})
+    # --- TAB 1: DSI RAW FRIED CHICKEN ---
+    with tab_dsi_fc:
+        st.subheader("Cek DSI Raw Fried Chicken")
+        st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('DSI_FC', 'Belum diatur')}`")
+        
+        input_fc = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Resume Default):", max_chars=4, key="fc_dsi").upper()
+        btn_enter_fc = st.button("Enter ↵", key="btn_fc_dsi", type="primary")
 
-                if len(input_fc) == 4:
-                    filtered_fc = df_fc[df_fc['KODE_TOKO'] == input_fc].copy()
-                    if filtered_fc.empty:
-                        st.warning(f"⚠️ Data untuk kode toko '{input_fc}' tidak ditemukan di sheet DSI_FC.")
-                    else:
-                        st.success(f"✅ Data ditemukan untuk toko: {input_fc}")
-                        
-                        # SORTING: Diurutkan berdasarkan RP POTENSI RUSAK tertinggi
-                        filtered_fc = filtered_fc.sort_values(by="RP POTENSI RUSAK", ascending=False)
-                        
-                        # KOLOM YANG DITAMPILKAN DIUBAH SESUAI PERMINTAAN
-                        kolom_tampil_fc = ['PLU RAW', 'DESC', 'DSI', 'QTY POTENSI RUSAK', 'RP POTENSI RUSAK', 'CEK DSI']
-                        display_df_fc = filtered_fc[[c for c in kolom_tampil_fc if c in filtered_fc.columns]]
-                        st.dataframe(display_df_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
-                        
-                        out_fc = BytesIO()
-                        with pd.ExcelWriter(out_fc, engine='openpyxl') as writer:
-                            filtered_fc.to_excel(writer, index=False, sheet_name='DSI_FriedChicken')
-                        st.download_button("📥 Download Data Lengkap (Excel)", data=out_fc.getvalue(), file_name=f"DSI_FC_{input_fc}.xlsx", type="primary")
-                else:
-                    st.info("📌 Menampilkan Ringkasan DSI FC by Rp Potensi Rusak tertinggi.")
+        with st.spinner("Memuat data Fried Chicken..."):
+            try:
+                resp = requests.get(base_url)
+                if resp.status_code == 200:
+                    df_fc = pd.read_excel(BytesIO(resp.content), sheet_name='DSI_FC')
                     
-                    st.write("### 👥 Resume DSI FC Per AM")
-                    df_am_fc = df_fc.groupby('AM', as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).copy()
-                    df_am_fc.insert(0, 'NO', range(1, len(df_am_fc) + 1))
-                    st.dataframe(df_am_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                    df_fc['KODE_TOKO'] = df_fc['KODE_TOKO'].astype(str).str.strip().str.upper()
+                    df_fc = df_fc.rename(columns={'POTENSI RUSAK': 'QTY POTENSI RUSAK', 'NAMA': 'NAMA TOKO'})
 
-                    st.write("### 👤 Top 10 Resume DSI FC Per AS")
-                    df_as_fc = df_fc.groupby('AS', as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
-                    df_as_fc.insert(0, 'NO', range(1, len(df_as_fc) + 1))
-                    st.dataframe(df_as_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                    if len(input_fc) == 4:
+                        filtered_fc = df_fc[df_fc['KODE_TOKO'] == input_fc].copy()
+                        if filtered_fc.empty:
+                            st.warning(f"⚠️ Data untuk kode toko '{input_fc}' tidak ditemukan di sheet DSI_FC.")
+                        else:
+                            st.success(f"✅ Data ditemukan untuk toko: {input_fc}")
+                            filtered_fc = filtered_fc.sort_values(by="RP POTENSI RUSAK", ascending=False)
+                            
+                            kolom_tampil_fc = ['PLU RAW', 'DESC', 'DSI', 'QTY POTENSI RUSAK', 'RP POTENSI RUSAK', 'CEK DSI']
+                            display_df_fc = filtered_fc[[c for c in kolom_tampil_fc if c in filtered_fc.columns]]
+                            st.dataframe(display_df_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                            
+                            out_fc = BytesIO()
+                            with pd.ExcelWriter(out_fc, engine='openpyxl') as writer:
+                                filtered_fc.to_excel(writer, index=False, sheet_name='DSI_FriedChicken')
+                            st.download_button("📥 Download Data Lengkap (Excel)", data=out_fc.getvalue(), file_name=f"DSI_FC_{input_fc}.xlsx", type="primary")
+                    else:
+                        st.info("📌 Menampilkan Ringkasan DSI FC by Rp Potensi Rusak tertinggi.")
+                        
+                        st.write("### 👥 Resume DSI FC Per AM")
+                        df_am_fc = df_fc.groupby('AM', as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).copy()
+                        df_am_fc.insert(0, 'NO', range(1, len(df_am_fc) + 1))
+                        st.dataframe(df_am_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
 
-                    st.write("### 🏪 Top 10 Resume DSI FC Per Toko")
-                    agg_fc = df_fc.groupby(['KODE_TOKO', 'NAMA TOKO', 'AM', 'AS'], as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
-                    agg_fc.insert(0, 'NO', range(1, len(agg_fc) + 1))
-                    st.dataframe(agg_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
-            else:
-                st.info("File Master belum diunggah oleh Admin.")
-        except ValueError:
-            st.error("❌ Sheet bernama 'DSI_FC' tidak ditemukan di file Excel Master!")
-        except Exception as e:
-            st.error(f"Terjadi kesalahan sistem: {e}")
+                        st.write("### 👤 Top 10 Resume DSI FC Per AS")
+                        df_as_fc = df_fc.groupby('AS', as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
+                        df_as_fc.insert(0, 'NO', range(1, len(df_as_fc) + 1))
+                        st.dataframe(df_as_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+
+                        st.write("### 🏪 Top 10 Resume DSI FC Per Toko")
+                        agg_fc = df_fc.groupby(['KODE_TOKO', 'NAMA TOKO', 'AM', 'AS'], as_index=False)[['QTY POTENSI RUSAK', 'RP POTENSI RUSAK']].sum().sort_values(by="RP POTENSI RUSAK", ascending=False).head(10).copy()
+                        agg_fc.insert(0, 'NO', range(1, len(agg_fc) + 1))
+                        st.dataframe(agg_fc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                else:
+                    st.info("File Master belum diunggah oleh Admin.")
+            except ValueError:
+                st.error("❌ Sheet bernama 'DSI_FC' tidak ditemukan di file Excel Master!")
+            except Exception as e:
+                st.error(f"Terjadi kesalahan sistem: {e}")
+
+    # --- TAB 2: RUSAK FRIED CHICKEN ---
+    with tab_rusak_fc:
+        st.subheader("Cek Rusak Fried Chicken Per Toko")
+        st.markdown(f"#### 📅 Periode Data: `{periode_dict.get('Rusak_FC', 'Belum diatur')}`")
+        
+        input_rusak_fc = st.text_input("🔍 Masukkan 4 Digit Kode Toko (Kosongkan untuk melihat Resume Default):", max_chars=4, key="fc_rusak").upper()
+        btn_enter_rfc = st.button("Enter ↵", key="btn_fc_rusak", type="primary")
+
+        with st.spinner("Memuat data Rusak Fried Chicken..."):
+            try:
+                resp = requests.get(base_url)
+                if resp.status_code == 200:
+                    df_rfc = pd.read_excel(BytesIO(resp.content), sheet_name='Rusak_FC')
+                    
+                    # Bersihkan kode toko
+                    df_rfc['KDTOKO'] = df_rfc['KDTOKO'].astype(str).str.strip().str.upper()
+                    
+                    # Hitung ulang presentase rusak agar akurat = (Rp Rusak / Rp Sales) * 100
+                    # Ganti infinite/NaN jika Rp Sales 0
+                    df_rfc['% RUSAK'] = (df_rfc['RP RUSAK'] / df_rfc['RP SALES']) * 100
+                    df_rfc['% RUSAK'] = df_rfc['% RUSAK'].replace([np.inf, -np.inf], 0).fillna(0)
+
+                    if len(input_rusak_fc) == 4:
+                        filtered_rfc = df_rfc[df_rfc['KDTOKO'] == input_rusak_fc].copy()
+                        if filtered_rfc.empty:
+                            st.warning(f"⚠️ Data untuk kode toko '{input_rusak_fc}' tidak ditemukan di sheet Rusak_FC.")
+                        else:
+                            # Label Satelit
+                            nama_toko_rfc = filtered_rfc.iloc[0]['NAMA TOKO']
+                            kd_satelit = filtered_rfc.iloc[0]['KD TOKO SATELIT'] if pd.notna(filtered_rfc.iloc[0]['KD TOKO SATELIT']) else "-"
+                            nama_satelit = filtered_rfc.iloc[0]['NAMA TOKO SATELIT'] if pd.notna(filtered_rfc.iloc[0]['NAMA TOKO SATELIT']) else "-"
+                            
+                            st.markdown("---")
+                            c1, c2, c3 = st.columns(3)
+                            with c1: st.success(f"**🏷️ Nama Toko:**\n\n{nama_toko_rfc}")
+                            with c2: st.info(f"**🛰️ Kode Satelit:**\n\n{kd_satelit}")
+                            with c3: st.warning(f"**🏢 Nama Satelit:**\n\n{nama_satelit}")
+                            
+                            st.write("")
+                            # Tampilkan kolom tabel
+                            kolom_tampil_rfc = [
+                                'QTY PRODUKSI', 'RP PRODUKSI', 'QTY SALES', 'RP SALES', 
+                                'QTY RUSAK', 'RP RUSAK', '% RUSAK', 'TYPE TOKO', 
+                                'JAM OPERASIONAL', 'TGL GO FRIED CHICKEN'
+                            ]
+                            
+                            display_df_rfc = filtered_rfc[[c for c in kolom_tampil_fc if c in filtered_rfc.columns] + [c for c in kolom_tampil_rfc if c in filtered_rfc.columns]]
+                            st.dataframe(filtered_rfc[[c for c in kolom_tampil_rfc if c in filtered_rfc.columns]].style.format(format_ribuan), hide_index=True, use_container_width=True)
+                            
+                            out_rfc = BytesIO()
+                            with pd.ExcelWriter(out_rfc, engine='openpyxl') as writer:
+                                filtered_rfc.to_excel(writer, index=False, sheet_name='Rusak_FC')
+                            st.download_button("📥 Download Data Lengkap (Excel)", data=out_rfc.getvalue(), file_name=f"Rusak_FC_{input_rusak_fc}.xlsx", type="primary")
+
+                    else:
+                        st.info("📌 Menampilkan Top 10 Toko dengan % Rusak tertinggi.")
+                        
+                        top_10_rfc = df_rfc.sort_values(by="% RUSAK", ascending=False).head(10).copy()
+                        top_10_rfc.insert(0, 'NO', range(1, len(top_10_rfc) + 1))
+                        
+                        kolom_resume_rfc = ['NO', 'KDTOKO', 'NAMA TOKO', 'KD TOKO SATELIT', 'NAMA TOKO SATELIT', 'QTY PRODUKSI', 'RP PRODUKSI', 'QTY SALES', 'RP SALES', 'QTY RUSAK', 'RP RUSAK', '% RUSAK']
+                        
+                        st.dataframe(top_10_rfc[[c for c in kolom_resume_rfc if c in top_10_rfc.columns]].style.format(format_ribuan), hide_index=True, use_container_width=True)
+                        
+                else:
+                    st.info("File Master belum diunggah oleh Admin.")
+            except ValueError:
+                st.error("❌ Sheet bernama 'Rusak_FC' tidak ditemukan di file Excel Master!")
+            except Exception as e:
+                st.error(f"Terjadi kesalahan sistem: {e}")
 
 
 # ==========================================
@@ -396,13 +478,23 @@ elif st.session_state.current_page == "Admin":
         st.write("### 1. Pengaturan Periode Data")
         
         c1, c2, c3 = st.columns(3)
-        with c1: p_res = st.date_input("Periode [Resume Rusak]:", []); p_mon = st.date_input("Periode [Monitoring SB]:", [])
-        with c2: p_dsi = st.date_input("Periode [DSI SB]:", []); p_rek = st.date_input("Periode [Rekomendasi]:", [])
-        with c3: p_fc = st.date_input("Periode [DSI FC]:", [])
+        with c1: 
+            p_res = st.date_input("Periode [Resume Rusak]:", [])
+            p_mon = st.date_input("Periode [Monitoring SB]:", [])
+        with c2: 
+            p_dsi = st.date_input("Periode [DSI SB]:", [])
+            p_rek = st.date_input("Periode [Rekomendasi]:", [])
+        with c3: 
+            p_fc = st.date_input("Periode [DSI FC]:", [])
+            p_rfc = st.date_input("Periode [Rusak FC]:", []) # TAMBAHAN PERIODE RUSAK FC
 
         def fd(d): return f"{d[0].strftime('%d %b %Y')} - {d[1].strftime('%d %b %Y')}" if len(d)==2 else (d[0].strftime('%d %b %Y') if len(d)==1 else "Belum diatur")
 
-        dict_periode_baru = {"Resume_Rusak": fd(p_res), "Monitoring": fd(p_mon), "DSI_FD": fd(p_dsi), "Rekomendasi": fd(p_rek), "DSI_FC": fd(p_fc)}
+        dict_periode_baru = {
+            "Resume_Rusak": fd(p_res), "Monitoring": fd(p_mon), 
+            "DSI_FD": fd(p_dsi), "Rekomendasi": fd(p_rek), 
+            "DSI_FC": fd(p_fc), "Rusak_FC": fd(p_rfc)
+        }
 
         if st.button("🔄 Simpan & Perbarui Tanggal Saja", type="secondary"):
             with st.spinner("Menyimpan..."):
@@ -411,7 +503,7 @@ elif st.session_state.current_page == "Admin":
 
         st.markdown("---")
         st.write("### 2. Upload File Excel Master")
-        st.warning("Pastikan file Excel memiliki sheet: **Resume_Rusak**, **Monitoring**, **DSI_FD**, **Rekomendasi**, dan **DSI_FC**.")
+        st.warning("Pastikan file Excel memiliki sheet: **Resume_Rusak**, **Monitoring**, **DSI_FD**, **Rekomendasi**, **DSI_FC**, dan **Rusak_FC**.")
         uploaded_file = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
         
         if uploaded_file and st.button("📤 Upload Excel & Perbarui Semua", type="primary"):
