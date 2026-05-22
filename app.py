@@ -159,6 +159,7 @@ elif st.session_state.current_page == "Say Bread":
                         if filtered.empty: 
                             st.warning("Data tidak ditemukan.")
                         else:
+                            if 'NO' in filtered.columns: filtered = filtered.drop(columns=['NO'])
                             filtered.insert(0, 'NO', range(1, len(filtered) + 1))
                             st.dataframe(filtered.style.format(format_ribuan), hide_index=True, use_container_width=True)
                     else:
@@ -181,6 +182,7 @@ elif st.session_state.current_page == "Say Bread":
 
                         st.write("### 🏪 Top 10 Resume Rusak Per Toko")
                         df_toko = df_res.sort_values(by='%', ascending=False).head(10).copy()[['TOKO', 'NAMA', 'AM', 'AS', 'PENJ.BERSIH', 'RUSAK', '%']]
+                        if 'NO' in df_toko.columns: df_toko = df_toko.drop(columns=['NO'])
                         df_toko.insert(0, 'NO', range(1, len(df_toko) + 1))
                         st.dataframe(df_toko.style.format(format_ribuan), hide_index=True, use_container_width=True)
             except Exception as e: 
@@ -379,23 +381,20 @@ elif st.session_state.current_page == "Fried Chicken":
             try:
                 resp = requests.get(base_url)
                 if resp.status_code == 200:
-                    # SMART READER: Mencegah error spasi pada nama sheet
                     xls = pd.ExcelFile(BytesIO(resp.content))
                     target_sheet = None
                     
-                    # Mencari sheet yang namanya mirip dengan Rusak_FC (mengabaikan spasi)
                     for sheet_name in xls.sheet_names:
                         if sheet_name.strip().upper() == 'RUSAK_FC':
                             target_sheet = sheet_name
                             break
                     
                     if target_sheet is None:
-                        st.error(f"❌ Sheet 'Rusak_FC' tidak ditemukan! Daftar sheet di Excel Anda saat ini: {xls.sheet_names}")
-                        st.info("💡 Pastikan Anda sudah mengupload ulang Excel terbaru via menu Admin, dan pastikan tidak ada salah ketik pada nama sheet.")
+                        st.error(f"❌ Sheet 'Rusak_FC' tidak ditemukan! Daftar sheet di Excel: {xls.sheet_names}")
                     else:
                         df_rfc = pd.read_excel(xls, sheet_name=target_sheet)
-                        
                         df_rfc['KDTOKO'] = df_rfc['KDTOKO'].astype(str).str.strip().str.upper()
+                        
                         df_rfc['% RUSAK'] = (df_rfc['RP RUSAK'] / df_rfc['RP SALES']) * 100
                         df_rfc['% RUSAK'] = df_rfc['% RUSAK'].replace([np.inf, -np.inf], 0).fillna(0)
 
@@ -433,10 +432,14 @@ elif st.session_state.current_page == "Fried Chicken":
                             st.info("📌 Menampilkan Top 10 Toko dengan % Rusak tertinggi.")
                             
                             top_10_rfc = df_rfc.sort_values(by="% RUSAK", ascending=False).head(10).copy()
+                            
+                            # PERBAIKAN ERROR "NO ALREADY EXISTS" DI SINI
+                            if 'NO' in top_10_rfc.columns:
+                                top_10_rfc = top_10_rfc.drop(columns=['NO'])
+                                
                             top_10_rfc.insert(0, 'NO', range(1, len(top_10_rfc) + 1))
                             
                             kolom_resume_rfc = ['NO', 'KDTOKO', 'NAMA TOKO', 'KD TOKO SATELIT', 'NAMA TOKO SATELIT', 'QTY PRODUKSI', 'RP PRODUKSI', 'QTY SALES', 'RP SALES', 'QTY RUSAK', 'RP RUSAK', '% RUSAK']
-                            
                             st.dataframe(top_10_rfc[[c for c in kolom_resume_rfc if c in top_10_rfc.columns]].style.format(format_ribuan), hide_index=True, use_container_width=True)
                         
                 else:
