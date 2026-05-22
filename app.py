@@ -379,138 +379,39 @@ elif st.session_state.current_page == "Fried Chicken":
             try:
                 resp = requests.get(base_url)
                 if resp.status_code == 200:
-                    df_rfc = pd.read_excel(BytesIO(resp.content), sheet_name='Rusak_FC')
+                    # SMART READER: Mencegah error spasi pada nama sheet
+                    xls = pd.ExcelFile(BytesIO(resp.content))
+                    target_sheet = None
                     
-                    df_rfc['KDTOKO'] = df_rfc['KDTOKO'].astype(str).str.strip().str.upper()
+                    # Mencari sheet yang namanya mirip dengan Rusak_FC (mengabaikan spasi)
+                    for sheet_name in xls.sheet_names:
+                        if sheet_name.strip().upper() == 'RUSAK_FC':
+                            target_sheet = sheet_name
+                            break
                     
-                    df_rfc['% RUSAK'] = (df_rfc['RP RUSAK'] / df_rfc['RP SALES']) * 100
-                    df_rfc['% RUSAK'] = df_rfc['% RUSAK'].replace([np.inf, -np.inf], 0).fillna(0)
-
-                    if len(input_rusak_fc) == 4:
-                        filtered_rfc = df_rfc[df_rfc['KDTOKO'] == input_rusak_fc].copy()
-                        if filtered_rfc.empty:
-                            st.warning(f"⚠️ Data untuk kode toko '{input_rusak_fc}' tidak ditemukan di sheet Rusak_FC.")
-                        else:
-                            nama_toko_rfc = filtered_rfc.iloc[0]['NAMA TOKO']
-                            kd_satelit = filtered_rfc.iloc[0]['KD TOKO SATELIT'] if pd.notna(filtered_rfc.iloc[0]['KD TOKO SATELIT']) else "-"
-                            nama_satelit = filtered_rfc.iloc[0]['NAMA TOKO SATELIT'] if pd.notna(filtered_rfc.iloc[0]['NAMA TOKO SATELIT']) else "-"
-                            
-                            st.markdown("---")
-                            c1, c2, c3 = st.columns(3)
-                            with c1: st.success(f"**🏷️ Nama Toko:**\n\n{nama_toko_rfc}")
-                            with c2: st.info(f"**🛰️ Kode Satelit:**\n\n{kd_satelit}")
-                            with c3: st.warning(f"**🏢 Nama Satelit:**\n\n{nama_satelit}")
-                            
-                            st.write("")
-                            # PERBAIKAN: Hanya mengambil kolom yang benar-benar ada dan dibutuhkan
-                            kolom_tampil_rfc = [
-                                'QTY PRODUKSI', 'RP PRODUKSI', 'QTY SALES', 'RP SALES', 
-                                'QTY RUSAK', 'RP RUSAK', '% RUSAK', 'TYPE TOKO', 
-                                'JAM OPERASIONAL', 'TGL GO FRIED CHICKEN'
-                            ]
-                            
-                            display_df_rfc = filtered_rfc[[c for c in kolom_tampil_rfc if c in filtered_rfc.columns]]
-                            st.dataframe(display_df_rfc.style.format(format_ribuan), hide_index=True, use_container_width=True)
-                            
-                            out_rfc = BytesIO()
-                            with pd.ExcelWriter(out_rfc, engine='openpyxl') as writer:
-                                filtered_rfc.to_excel(writer, index=False, sheet_name='Rusak_FC')
-                            st.download_button("📥 Download Data Lengkap (Excel)", data=out_rfc.getvalue(), file_name=f"Rusak_FC_{input_rusak_fc}.xlsx", type="primary")
-
+                    if target_sheet is None:
+                        st.error(f"❌ Sheet 'Rusak_FC' tidak ditemukan! Daftar sheet di Excel Anda saat ini: {xls.sheet_names}")
+                        st.info("💡 Pastikan Anda sudah mengupload ulang Excel terbaru via menu Admin, dan pastikan tidak ada salah ketik pada nama sheet.")
                     else:
-                        st.info("📌 Menampilkan Top 10 Toko dengan % Rusak tertinggi.")
+                        df_rfc = pd.read_excel(xls, sheet_name=target_sheet)
                         
-                        top_10_rfc = df_rfc.sort_values(by="% RUSAK", ascending=False).head(10).copy()
-                        top_10_rfc.insert(0, 'NO', range(1, len(top_10_rfc) + 1))
-                        
-                        kolom_resume_rfc = ['NO', 'KDTOKO', 'NAMA TOKO', 'KD TOKO SATELIT', 'NAMA TOKO SATELIT', 'QTY PRODUKSI', 'RP PRODUKSI', 'QTY SALES', 'RP SALES', 'QTY RUSAK', 'RP RUSAK', '% RUSAK']
-                        
-                        st.dataframe(top_10_rfc[[c for c in kolom_resume_rfc if c in top_10_rfc.columns]].style.format(format_ribuan), hide_index=True, use_container_width=True)
-                        
-                else:
-                    st.info("File Master belum diunggah oleh Admin.")
-            except ValueError:
-                st.error("❌ Sheet bernama 'Rusak_FC' tidak ditemukan di file Excel Master!")
-            except Exception as e:
-                st.error(f"Terjadi kesalahan sistem: {e}")
+                        df_rfc['KDTOKO'] = df_rfc['KDTOKO'].astype(str).str.strip().str.upper()
+                        df_rfc['% RUSAK'] = (df_rfc['RP RUSAK'] / df_rfc['RP SALES']) * 100
+                        df_rfc['% RUSAK'] = df_rfc['% RUSAK'].replace([np.inf, -np.inf], 0).fillna(0)
 
-
-# ==========================================
-# HALAMAN 4: ADMIN AREA
-# ==========================================
-elif st.session_state.current_page == "Admin":
-    col_back, col_title = st.columns([1, 10])
-    with col_back:
-        if st.button("⬅️ Kembali", use_container_width=True): go_home(); st.rerun()
-    with col_title:
-        st.title("⚙️ Halaman Pengaturan Admin")
-
-    if st.session_state.admin_logged_in:
-        time_elapsed = time.time() - st.session_state.last_active
-        if time_elapsed > 300: 
-            st.session_state.admin_logged_in = False
-            st.warning("⏱️ Sesi Admin telah berakhir (Timeout 5 Menit). Silakan login kembali.")
-            time.sleep(2); st.rerun()
-
-    if not st.session_state.admin_logged_in:
-        st.subheader("🔐 Login Admin")
-        password_input = st.text_input("Masukkan Password Admin:", type="password", key="login_admin_page")
-        if st.button("Login", type="primary"):
-            if password_input == "icnbr034":
-                st.session_state.admin_logged_in = True
-                st.session_state.last_active = time.time() 
-                st.rerun() 
-            else: st.error("❌ Password Salah!")
-    else:
-        st.session_state.last_active = time.time() 
-        col_t, col_l = st.columns([4, 1])
-        with col_t: st.success("🔓 Login Berhasil! Selamat datang Admin.")
-        with col_l:
-            if st.button("🚪 Logout", use_container_width=True, type="primary"):
-                st.session_state.admin_logged_in = False; st.rerun()
-
-        st.markdown("---")
-        st.write("### 1. Pengaturan Periode Data")
-        
-        c1, c2, c3 = st.columns(3)
-        with c1: 
-            p_res = st.date_input("Periode [Resume Rusak]:", [])
-            p_mon = st.date_input("Periode [Monitoring SB]:", [])
-        with c2: 
-            p_dsi = st.date_input("Periode [DSI SB]:", [])
-            p_rek = st.date_input("Periode [Rekomendasi]:", [])
-        with c3: 
-            p_fc = st.date_input("Periode [DSI FC]:", [])
-            p_rfc = st.date_input("Periode [Rusak FC]:", [])
-
-        def fd(d): return f"{d[0].strftime('%d %b %Y')} - {d[1].strftime('%d %b %Y')}" if len(d)==2 else (d[0].strftime('%d %b %Y') if len(d)==1 else "Belum diatur")
-
-        dict_periode_baru = {
-            "Resume_Rusak": fd(p_res), "Monitoring": fd(p_mon), 
-            "DSI_FD": fd(p_dsi), "Rekomendasi": fd(p_rek), 
-            "DSI_FC": fd(p_fc), "Rusak_FC": fd(p_rfc)
-        }
-
-        if st.button("🔄 Simpan & Perbarui Tanggal Saja", type="secondary"):
-            with st.spinner("Menyimpan..."):
-                cloudinary.uploader.upload(BytesIO(json.dumps(dict_periode_baru).encode('utf-8')), resource_type="raw", public_id=PUBLIC_PERIODE_ID, overwrite=True, invalidate=True)
-                st.success("✅ Tanggal berhasil diperbarui!")
-
-        st.markdown("---")
-        st.write("### 2. Upload File Excel Master")
-        st.warning("Pastikan file Excel memiliki sheet: **Resume_Rusak**, **Monitoring**, **DSI_FD**, **Rekomendasi**, **DSI_FC**, dan **Rusak_FC**.")
-        uploaded_file = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
-        
-        if uploaded_file and st.button("📤 Upload Excel & Perbarui Semua", type="primary"):
-            with st.spinner("Mengunggah..."):
-                cloudinary.uploader.upload(uploaded_file, resource_type="raw", public_id=PUBLIC_FILE_ID, overwrite=True, invalidate=True)
-                cloudinary.uploader.upload(BytesIO(json.dumps(dict_periode_baru).encode('utf-8')), resource_type="raw", public_id=PUBLIC_PERIODE_ID, overwrite=True, invalidate=True)
-                st.success("✅ File Master Excel dan Periode berhasil diperbarui!")
-
-        st.markdown("---")
-        st.write("### 3. Download File Excel Master")
-        try:
-            resp_raw = requests.get(base_url)
-            if resp_raw.status_code == 200:
-                st.download_button("📥 DOWNLOAD FILE MASTER SEKARANG (.xlsx)", data=resp_raw.content, file_name="Master_Database_ProdukKhusus.xlsx", type="primary")
-        except: st.error("Gagal memuat file.")
+                        if len(input_rusak_fc) == 4:
+                            filtered_rfc = df_rfc[df_rfc['KDTOKO'] == input_rusak_fc].copy()
+                            if filtered_rfc.empty:
+                                st.warning(f"⚠️ Data untuk kode toko '{input_rusak_fc}' tidak ditemukan di sheet {target_sheet}.")
+                            else:
+                                nama_toko_rfc = filtered_rfc.iloc[0]['NAMA TOKO']
+                                kd_satelit = filtered_rfc.iloc[0]['KD TOKO SATELIT'] if pd.notna(filtered_rfc.iloc[0]['KD TOKO SATELIT']) else "-"
+                                nama_satelit = filtered_rfc.iloc[0]['NAMA TOKO SATELIT'] if pd.notna(filtered_rfc.iloc[0]['NAMA TOKO SATELIT']) else "-"
+                                
+                                st.markdown("---")
+                                c1, c2, c3 = st.columns(3)
+                                with c1: st.success(f"**🏷️ Nama Toko:**\n\n{nama_toko_rfc}")
+                                with c2: st.info(f"**🛰️ Kode Satelit:**\n\n{kd_satelit}")
+                                with c3: st.warning(f"**🏢 Nama Satelit:**\n\n{nama_satelit}")
+                                
+                                st.write("")
