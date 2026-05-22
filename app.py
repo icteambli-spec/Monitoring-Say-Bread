@@ -415,3 +415,112 @@ elif st.session_state.current_page == "Fried Chicken":
                                 with c3: st.warning(f"**🏢 Nama Satelit:**\n\n{nama_satelit}")
                                 
                                 st.write("")
+                                kolom_tampil_rfc = [
+                                    'QTY PRODUKSI', 'RP PRODUKSI', 'QTY SALES', 'RP SALES', 
+                                    'QTY RUSAK', 'RP RUSAK', '% RUSAK', 'TYPE TOKO', 
+                                    'JAM OPERASIONAL', 'TGL GO FRIED CHICKEN'
+                                ]
+                                
+                                display_df_rfc = filtered_rfc[[c for c in kolom_tampil_rfc if c in filtered_rfc.columns]]
+                                st.dataframe(display_df_rfc.style.format(format_ribuan), hide_index=True, use_container_width=True)
+                                
+                                out_rfc = BytesIO()
+                                with pd.ExcelWriter(out_rfc, engine='openpyxl') as writer:
+                                    filtered_rfc.to_excel(writer, index=False, sheet_name='Rusak_FC')
+                                st.download_button("📥 Download Data Lengkap (Excel)", data=out_rfc.getvalue(), file_name=f"Rusak_FC_{input_rusak_fc}.xlsx", type="primary")
+
+                        else:
+                            st.info("📌 Menampilkan Top 10 Toko dengan % Rusak tertinggi.")
+                            
+                            top_10_rfc = df_rfc.sort_values(by="% RUSAK", ascending=False).head(10).copy()
+                            top_10_rfc.insert(0, 'NO', range(1, len(top_10_rfc) + 1))
+                            
+                            kolom_resume_rfc = ['NO', 'KDTOKO', 'NAMA TOKO', 'KD TOKO SATELIT', 'NAMA TOKO SATELIT', 'QTY PRODUKSI', 'RP PRODUKSI', 'QTY SALES', 'RP SALES', 'QTY RUSAK', 'RP RUSAK', '% RUSAK']
+                            
+                            st.dataframe(top_10_rfc[[c for c in kolom_resume_rfc if c in top_10_rfc.columns]].style.format(format_ribuan), hide_index=True, use_container_width=True)
+                        
+                else:
+                    st.info("File Master belum diunggah oleh Admin.")
+            except Exception as e:
+                st.error(f"Terjadi kesalahan sistem: {e}")
+
+
+# ==========================================
+# HALAMAN 4: ADMIN AREA
+# ==========================================
+elif st.session_state.current_page == "Admin":
+    col_back, col_title = st.columns([1, 10])
+    with col_back:
+        if st.button("⬅️ Kembali", use_container_width=True): go_home(); st.rerun()
+    with col_title:
+        st.title("⚙️ Halaman Pengaturan Admin")
+
+    if st.session_state.admin_logged_in:
+        time_elapsed = time.time() - st.session_state.last_active
+        if time_elapsed > 300: 
+            st.session_state.admin_logged_in = False
+            st.warning("⏱️ Sesi Admin telah berakhir (Timeout 5 Menit). Silakan login kembali.")
+            time.sleep(2); st.rerun()
+
+    if not st.session_state.admin_logged_in:
+        st.subheader("🔐 Login Admin")
+        password_input = st.text_input("Masukkan Password Admin:", type="password", key="login_admin_page")
+        if st.button("Login", type="primary"):
+            if password_input == "icnbr034":
+                st.session_state.admin_logged_in = True
+                st.session_state.last_active = time.time() 
+                st.rerun() 
+            else: st.error("❌ Password Salah!")
+    else:
+        st.session_state.last_active = time.time() 
+        col_t, col_l = st.columns([4, 1])
+        with col_t: st.success("🔓 Login Berhasil! Selamat datang Admin.")
+        with col_l:
+            if st.button("🚪 Logout", use_container_width=True, type="primary"):
+                st.session_state.admin_logged_in = False; st.rerun()
+
+        st.markdown("---")
+        st.write("### 1. Pengaturan Periode Data")
+        
+        c1, c2, c3 = st.columns(3)
+        with c1: 
+            p_res = st.date_input("Periode [Resume Rusak]:", [])
+            p_mon = st.date_input("Periode [Monitoring SB]:", [])
+        with c2: 
+            p_dsi = st.date_input("Periode [DSI SB]:", [])
+            p_rek = st.date_input("Periode [Rekomendasi]:", [])
+        with c3: 
+            p_fc = st.date_input("Periode [DSI FC]:", [])
+            p_rfc = st.date_input("Periode [Rusak FC]:", [])
+
+        def fd(d): return f"{d[0].strftime('%d %b %Y')} - {d[1].strftime('%d %b %Y')}" if len(d)==2 else (d[0].strftime('%d %b %Y') if len(d)==1 else "Belum diatur")
+
+        dict_periode_baru = {
+            "Resume_Rusak": fd(p_res), "Monitoring": fd(p_mon), 
+            "DSI_FD": fd(p_dsi), "Rekomendasi": fd(p_rek), 
+            "DSI_FC": fd(p_fc), "Rusak_FC": fd(p_rfc)
+        }
+
+        if st.button("🔄 Simpan & Perbarui Tanggal Saja", type="secondary"):
+            with st.spinner("Menyimpan..."):
+                cloudinary.uploader.upload(BytesIO(json.dumps(dict_periode_baru).encode('utf-8')), resource_type="raw", public_id=PUBLIC_PERIODE_ID, overwrite=True, invalidate=True)
+                st.success("✅ Tanggal berhasil diperbarui!")
+
+        st.markdown("---")
+        st.write("### 2. Upload File Excel Master")
+        st.warning("Pastikan file Excel memiliki sheet: **Resume_Rusak**, **Monitoring**, **DSI_FD**, **Rekomendasi**, **DSI_FC**, dan **Rusak_FC**.")
+        uploaded_file = st.file_uploader("Pilih file Excel", type=["xlsx", "xls"])
+        
+        if uploaded_file and st.button("📤 Upload Excel & Perbarui Semua", type="primary"):
+            with st.spinner("Mengunggah..."):
+                cloudinary.uploader.upload(uploaded_file, resource_type="raw", public_id=PUBLIC_FILE_ID, overwrite=True, invalidate=True)
+                cloudinary.uploader.upload(BytesIO(json.dumps(dict_periode_baru).encode('utf-8')), resource_type="raw", public_id=PUBLIC_PERIODE_ID, overwrite=True, invalidate=True)
+                st.success("✅ File Master Excel dan Periode berhasil diperbarui!")
+
+        st.markdown("---")
+        st.write("### 3. Download File Excel Master")
+        try:
+            resp_raw = requests.get(base_url)
+            if resp_raw.status_code == 200:
+                st.download_button("📥 DOWNLOAD FILE MASTER SEKARANG (.xlsx)", data=resp_raw.content, file_name="Master_Database_ProdukKhusus.xlsx", type="primary")
+        except: st.error("Gagal memuat file.")
