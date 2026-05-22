@@ -306,7 +306,6 @@ elif st.session_state.current_page == "Fried Chicken":
     with col_title:
         st.title("🍗 Portal Monitoring Fried Chicken")
 
-    # MENGGUNAKAN TABS UNTUK FRIED CHICKEN
     tab_dsi_fc, tab_rusak_fc = st.tabs([
         "📈 Cek DSI Raw Fried Chicken", "📊 Cek Rusak Fried Chicken Per Toko"
     ])
@@ -382,11 +381,8 @@ elif st.session_state.current_page == "Fried Chicken":
                 if resp.status_code == 200:
                     df_rfc = pd.read_excel(BytesIO(resp.content), sheet_name='Rusak_FC')
                     
-                    # Bersihkan kode toko
                     df_rfc['KDTOKO'] = df_rfc['KDTOKO'].astype(str).str.strip().str.upper()
                     
-                    # Hitung ulang presentase rusak agar akurat = (Rp Rusak / Rp Sales) * 100
-                    # Ganti infinite/NaN jika Rp Sales 0
                     df_rfc['% RUSAK'] = (df_rfc['RP RUSAK'] / df_rfc['RP SALES']) * 100
                     df_rfc['% RUSAK'] = df_rfc['% RUSAK'].replace([np.inf, -np.inf], 0).fillna(0)
 
@@ -395,7 +391,6 @@ elif st.session_state.current_page == "Fried Chicken":
                         if filtered_rfc.empty:
                             st.warning(f"⚠️ Data untuk kode toko '{input_rusak_fc}' tidak ditemukan di sheet Rusak_FC.")
                         else:
-                            # Label Satelit
                             nama_toko_rfc = filtered_rfc.iloc[0]['NAMA TOKO']
                             kd_satelit = filtered_rfc.iloc[0]['KD TOKO SATELIT'] if pd.notna(filtered_rfc.iloc[0]['KD TOKO SATELIT']) else "-"
                             nama_satelit = filtered_rfc.iloc[0]['NAMA TOKO SATELIT'] if pd.notna(filtered_rfc.iloc[0]['NAMA TOKO SATELIT']) else "-"
@@ -407,15 +402,15 @@ elif st.session_state.current_page == "Fried Chicken":
                             with c3: st.warning(f"**🏢 Nama Satelit:**\n\n{nama_satelit}")
                             
                             st.write("")
-                            # Tampilkan kolom tabel
+                            # PERBAIKAN: Hanya mengambil kolom yang benar-benar ada dan dibutuhkan
                             kolom_tampil_rfc = [
                                 'QTY PRODUKSI', 'RP PRODUKSI', 'QTY SALES', 'RP SALES', 
                                 'QTY RUSAK', 'RP RUSAK', '% RUSAK', 'TYPE TOKO', 
                                 'JAM OPERASIONAL', 'TGL GO FRIED CHICKEN'
                             ]
                             
-                            display_df_rfc = filtered_rfc[[c for c in kolom_tampil_fc if c in filtered_rfc.columns] + [c for c in kolom_tampil_rfc if c in filtered_rfc.columns]]
-                            st.dataframe(filtered_rfc[[c for c in kolom_tampil_rfc if c in filtered_rfc.columns]].style.format(format_ribuan), hide_index=True, use_container_width=True)
+                            display_df_rfc = filtered_rfc[[c for c in kolom_tampil_rfc if c in filtered_rfc.columns]]
+                            st.dataframe(display_df_rfc.style.format(format_ribuan), hide_index=True, use_container_width=True)
                             
                             out_rfc = BytesIO()
                             with pd.ExcelWriter(out_rfc, engine='openpyxl') as writer:
@@ -486,7 +481,7 @@ elif st.session_state.current_page == "Admin":
             p_rek = st.date_input("Periode [Rekomendasi]:", [])
         with c3: 
             p_fc = st.date_input("Periode [DSI FC]:", [])
-            p_rfc = st.date_input("Periode [Rusak FC]:", []) # TAMBAHAN PERIODE RUSAK FC
+            p_rfc = st.date_input("Periode [Rusak FC]:", [])
 
         def fd(d): return f"{d[0].strftime('%d %b %Y')} - {d[1].strftime('%d %b %Y')}" if len(d)==2 else (d[0].strftime('%d %b %Y') if len(d)==1 else "Belum diatur")
 
